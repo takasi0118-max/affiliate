@@ -1,0 +1,143 @@
+# Cursor実装指示書
+## AIアフィリエイトサイト 半自動記事生成システム（Version 1.0）
+
+■プロジェクトの目的
+
+Pythonで、アフィリエイトサイト向けの記事生成・投稿を支援する半自動システムを作成してください。
+
+今回実装するサイトは防災グッズ専門アフィリエイトサイトです。
+
+ただし、防災専用システムではなく、今後キャンプ・ペット・ガジェットなど他ジャンルでも使い回せる設計にしてください。
+
+コードをコピーして別プロジェクトを作るのではなく、設定ファイルを変更するだけで新しいサイトを追加できる構成を目指してください。
+
+■開発方針
+
+1. 共通処理とサイト固有情報を分離する
+2. 完全自動にはせず、Markdown保存→人が確認→WordPress下書き投稿
+3. Python3.12、型ヒント、docstring、PEP8、責務分離を守る
+
+■フォルダ構成
+
+affiliate-system/
+├── main.py
+├── requirements.txt
+├── README.md
+├── .env.example
+├── config/
+├── providers/
+├── services/
+├── prompts/
+│   ├── common/
+│   └── disaster/
+├── sites/
+│   └── disaster/
+│       ├── themes.txt
+│       ├── categories.json
+│       ├── tags.json
+│       ├── history.json
+│       └── output/
+├── logs/
+├── tests/
+└── utils/
+
+■記事仕様
+
+1テーマにつき3記事を生成
+
+①悩み記事（2000文字以上）
+・問題提起
+・なぜ困るか
+・よくある失敗
+・解決方法
+・商品紹介記事へのリンク
+
+②商品紹介記事（3000文字以上）
+・楽天APIから3〜5商品取得
+・商品名
+・価格
+・URL
+・メリット
+・デメリット
+・初心者向け説明
+・比較記事へのリンク
+
+③比較ランキング記事（3000文字以上）
+・比較表
+・ランキング
+・用途別おすすめ
+・商品紹介記事へのリンク
+
+■SEO
+
+SEOタイトル
+meta description
+slug
+H2
+H3
+FAQ
+まとめ
+
+■楽天API
+
+商品名
+価格
+URL
+商品画像（可能なら）
+レビュー評価（可能なら）
+
+■OpenAI
+
+generate_problem_article()
+generate_product_article()
+generate_ranking_article()
+
+■WordPress
+
+REST API
+投稿前にY/N確認
+投稿状態=draft
+
+■保存
+
+sites/disaster/output/へMarkdown保存
+
+■X投稿
+
+printのみ
+
+■エラー処理
+
+楽天API3回リトライ
+OpenAI2回リトライ
+WordPressはログ出力
+
+■requirements.txt
+
+openai
+requests
+python-dotenv
+markdown
+beautifulsoup4
+pandas
+
+■README
+
+インストール
+.env設定
+楽天API
+OpenAI API
+WordPress設定
+実行方法
+
+■実装順
+
+1. フォルダ構成
+2. config
+3. providers
+4. services
+5. main.py
+6. README
+7. tests
+
+各ステップごとに動作確認しながら実装してください。
