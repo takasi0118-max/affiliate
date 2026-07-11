@@ -45,7 +45,7 @@ Cursorには必ず次のように指示してください。
 
 必須項目
 
--   Python3.12
+-   Python 3.13.5
 -   PEP8準拠
 -   型ヒント
 -   docstring

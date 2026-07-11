@@ -23,7 +23,7 @@ Version1.0では防災グッズ専門サイトを対象にしつつ、将来ほ�
 
 ## 使用技術
 
-- Python 3.12
+- Python 3.13.5
 - OpenAI API
 - 楽天市場API
 - WordPress REST API
@@ -91,7 +91,7 @@ affiliate-system/
 
 ## コーディングルール
 
-- Python3.12
+- Python 3.13.5
 - PEP8
 - 型ヒント必須
 - docstring必須
