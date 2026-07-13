@@ -19,6 +19,7 @@ class Settings:
     openai_api_key: str
     openai_model: str
     rakuten_application_id: str
+    rakuten_access_key: str
     rakuten_affiliate_id: str
     wordpress_url: str
     wordpress_username: str
@@ -46,6 +47,7 @@ def load_settings() -> Settings:
         openai_api_key=_get_required_env("OPENAI_API_KEY"),
         openai_model=_get_required_env("OPENAI_MODEL"),
         rakuten_application_id=_get_required_env("RAKUTEN_APPLICATION_ID"),
+        rakuten_access_key=_get_required_env("RAKUTEN_ACCESS_KEY"),
         rakuten_affiliate_id=_get_required_env("RAKUTEN_AFFILIATE_ID"),
         wordpress_url=_get_required_env("WORDPRESS_URL"),
         wordpress_username=_get_required_env("WORDPRESS_USERNAME"),
