@@ -11,6 +11,7 @@ from providers.gemini_provider import GeminiApiError, GeminiProvider
 from providers.rakuten_provider import RakutenApiError, RakutenProvider
 from providers.wordpress_provider import WordPressApiError, WordPressProvider
 from services.article_generator import ArticleGenerator
+from services.internal_link_service import InternalLinkService
 from services.product_service import ProductService
 from services.prompt_manager import PromptManager
 from services.seo_service import SeoService
@@ -63,6 +64,8 @@ def main() -> None:
     )
     # SeoServiceは、生成された記事にSEOタイトルやFAQが含まれているか確認する担当。
     seo_service = SeoService()
+    # InternalLinkServiceは、3記事のslugを使って関連記事リンクを追加する担当。
+    internal_link_service = InternalLinkService()
     # WordPressProviderはWordPress REST APIとの通信だけを担当する。
     # STEP08では安全のため投稿はせず、認証付きで接続できるかだけ確認する。
     wordpress_provider = WordPressProvider(
@@ -134,12 +137,26 @@ def main() -> None:
             )
             # 比較記事もSEO要素を満たしているか確認する。
             ranking_seo_analysis = seo_service.analyze_article(ranking_article.content)
+
+            # STEP14では、3記事が互いに行き来できるよう関連記事リンクを追加する。
+            linked_articles = internal_link_service.apply_links(
+                problem_article=problem_article,
+                problem_seo=problem_seo_analysis,
+                product_article=product_article,
+                product_seo=product_seo_analysis,
+                ranking_article=ranking_article,
+                ranking_seo=ranking_seo_analysis,
+            )
+            problem_article = linked_articles.problem_article
+            product_article = linked_articles.product_article
+            ranking_article = linked_articles.ranking_article
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
             problem_article = None
             product_article = None
             ranking_article = None
+            linked_articles = None
             gemini_error = str(error)
             problem_seo_analysis = None
             product_seo_analysis = None
@@ -153,6 +170,7 @@ def main() -> None:
         problem_article = None
         product_article = None
         ranking_article = None
+        linked_articles = None
         problem_seo_analysis = None
         product_seo_analysis = None
         ranking_seo_analysis = None
@@ -216,6 +234,9 @@ def main() -> None:
         print(f"Ranking H3 headings: {ranking_seo_analysis.h3_count}")
         print(f"Ranking FAQ items: {ranking_seo_analysis.faq_count}")
         print(f"Ranking summary section detected: {ranking_seo_analysis.has_summary}")
+    print(f"Internal links ready: {bool(linked_articles and linked_articles.is_ready)}")
+    if linked_articles is not None:
+        print(f"Internal links: {linked_articles.link_count}")
     print(f"Rakuten products: {len(products)}")
     print(f"Product prompt ready: {bool(product_result and product_result.prompt_text)}")
     print(f"Rakuten connected: {not rakuten_error}")
