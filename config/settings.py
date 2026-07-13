@@ -16,8 +16,8 @@ ENV_PATH: Final[Path] = PROJECT_ROOT / ".env"
 class Settings:
     """Application-wide settings loaded from the .env file."""
 
-    openai_api_key: str
-    openai_model: str
+    gemini_api_key: str
+    gemini_model: str
     rakuten_application_id: str
     rakuten_access_key: str
     rakuten_affiliate_id: str
@@ -44,8 +44,8 @@ def load_settings() -> Settings:
     output_dir = PROJECT_ROOT / _get_required_env("OUTPUT_DIR")
 
     return Settings(
-        openai_api_key=_get_required_env("OPENAI_API_KEY"),
-        openai_model=_get_required_env("OPENAI_MODEL"),
+        gemini_api_key=_get_required_env("GEMINI_API_KEY"),
+        gemini_model=_get_required_env("GEMINI_MODEL"),
         rakuten_application_id=_get_required_env("RAKUTEN_APPLICATION_ID"),
         rakuten_access_key=_get_required_env("RAKUTEN_ACCESS_KEY"),
         rakuten_affiliate_id=_get_required_env("RAKUTEN_AFFILIATE_ID"),

@@ -4,13 +4,42 @@ import logging
 
 from config.settings import PROJECT_ROOT, load_settings
 from config.site_config import load_site_config
-from providers.rakuten_provider import RakutenApiError, RakutenProvider
+from google.genai import errors
+from providers.gemini_provider import GeminiApiError, GeminiProvider
+from providers.rakuten_provider import RakutenApiError, RakutenProduct, RakutenProvider
+from services.article_generator import ArticleGenerator
 from services.prompt_manager import PromptManager
 from services.site_manager import SiteManager
 from utils.logger import setup_logging
 
 
 logger = logging.getLogger(__name__)
+
+
+def _format_products_for_prompt(products: list[RakutenProduct]) -> str:
+    """Format Rakuten products for article prompts."""
+    if not products:
+        return "楽天APIから関連商品を取得できませんでした。"
+
+    lines: list[str] = []
+    for index, product in enumerate(products, start=1):
+        review = "レビュー情報なし"
+        if product.review_average is not None and product.review_count is not None:
+            review = f"レビュー平均: {product.review_average} / 件数: {product.review_count}"
+
+        lines.append(
+            "\n".join(
+                [
+                    f"{index}. {product.name}",
+                    f"   - 価格: {product.price}円",
+                    f"   - URL: {product.url}",
+                    f"   - 画像URL: {product.image_url or 'なし'}",
+                    f"   - {review}",
+                ]
+            )
+        )
+
+    return "\n\n".join(lines)
 
 
 def main() -> None:
@@ -35,9 +64,18 @@ def main() -> None:
         access_key=settings.rakuten_access_key,
         affiliate_id=settings.rakuten_affiliate_id,
     )
+    gemini_provider = GeminiProvider(
+        api_key=settings.gemini_api_key,
+        model=settings.gemini_model,
+    )
+    article_generator = ArticleGenerator(
+        prompt_manager=prompt_manager,
+        gemini_provider=gemini_provider,
+    )
 
     if next_theme is not None:
         rakuten_error = ""
+        gemini_error = ""
         try:
             products = rakuten_provider.search_items(keyword=next_theme, hits=5)
         except RakutenApiError as error:
@@ -45,20 +83,22 @@ def main() -> None:
             products = []
             rakuten_error = str(error)
 
-        sample_prompt = prompt_manager.build_prompt(
-            prompt_name="problem_article",
-            variables={
-                "theme": next_theme,
-                "article_type": "problem",
-                "category": site_manager.get_default_category(),
-                "tags": ", ".join(site_manager.get_default_tags()),
-                "products": f"楽天APIから{len(products)}件の商品を取得済みです。",
-            },
-        )
+        try:
+            sample_article = article_generator.generate_problem_article(
+                theme=next_theme,
+                category=site_manager.get_default_category(),
+                tags=site_manager.get_default_tags(),
+                products=_format_products_for_prompt(products),
+            )
+        except (GeminiApiError, errors.APIError) as error:
+            logger.error("Gemini article generation failed: %s", error)
+            sample_article = ""
+            gemini_error = str(error)
     else:
         products = []
         rakuten_error = ""
-        sample_prompt = ""
+        gemini_error = ""
+        sample_article = ""
 
     logger.info("Configuration loaded for site: %s", site_config.site_key)
     print("Affiliate system prompt management is ready.")
@@ -70,11 +110,14 @@ def main() -> None:
     print(f"Default tags: {len(site_manager.get_default_tags())}")
     print(f"History records: {len(site_manager.history)}")
     print(f"Prompt templates: {len(available_prompts)}")
-    print(f"Sample prompt built: {bool(sample_prompt)}")
+    print(f"Sample article generated: {bool(sample_article)}")
     print(f"Rakuten products: {len(products)}")
     print(f"Rakuten connected: {not rakuten_error}")
     if rakuten_error:
         print(f"Rakuten error: {rakuten_error}")
+    print(f"Gemini connected: {not gemini_error}")
+    if gemini_error:
+        print(f"Gemini error: {gemini_error}")
 
 
 if __name__ == "__main__":

@@ -60,7 +60,7 @@ Cursorには必ず次のように指示してください。
 実装順
 
 1.  楽天API
-2.  OpenAI
+2.  Gemini
 3.  WordPress
 
 APIは一つずつ動作確認してから次へ進みます。
