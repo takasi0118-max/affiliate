@@ -100,25 +100,38 @@ def main() -> None:
             rakuten_error = str(error)
 
         try:
+            product_prompt_text = (
+                product_result.prompt_text
+                if product_result is not None
+                else ProductService.format_products_for_prompt(products)
+            )
             # STEP11では、1テーマ目の正式な悩み記事を生成する。
             problem_article = article_generator.generate_problem_article(
                 theme=next_theme,
                 category=site_manager.get_default_category(),
                 tags=site_manager.get_default_tags(),
-                products=(
-                    product_result.prompt_text
-                    if product_result is not None
-                    else ProductService.format_products_for_prompt(products)
-                ),
+                products=product_prompt_text,
             )
             # 生成した悩み記事からSEOメタ情報と見出し構成を読み取って確認する。
-            seo_analysis = seo_service.analyze_article(problem_article.content)
+            problem_seo_analysis = seo_service.analyze_article(problem_article.content)
+
+            # STEP12では、同じ楽天商品情報を使って商品紹介記事も生成する。
+            product_article = article_generator.generate_product_article(
+                theme=next_theme,
+                category=site_manager.get_default_category(),
+                tags=site_manager.get_default_tags(),
+                products=product_prompt_text,
+            )
+            # 商品記事もSEO要素を満たしているか確認する。
+            product_seo_analysis = seo_service.analyze_article(product_article.content)
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
             problem_article = None
+            product_article = None
             gemini_error = str(error)
-            seo_analysis = None
+            problem_seo_analysis = None
+            product_seo_analysis = None
     else:
         # すべてのテーマが処理済みなら、API通信は行わずに結果表示だけ行う。
         products = []
@@ -126,7 +139,9 @@ def main() -> None:
         rakuten_error = ""
         gemini_error = ""
         problem_article = None
-        seo_analysis = None
+        product_article = None
+        problem_seo_analysis = None
+        product_seo_analysis = None
 
     # 実行結果をターミナルへ出し、どこまで接続できたかを確認しやすくする。
     logger.info("Configuration loaded for site: %s", site_config.site_key)
@@ -143,15 +158,34 @@ def main() -> None:
     if problem_article is not None:
         print(f"Problem article type: {problem_article.article_type}")
         print(f"Problem article characters: {problem_article.character_count}")
-    print(f"SEO ready: {bool(seo_analysis and seo_analysis.is_ready)}")
-    if seo_analysis is not None:
-        print(f"SEO title detected: {bool(seo_analysis.seo_title)}")
-        print(f"Meta description detected: {bool(seo_analysis.meta_description)}")
-        print(f"Slug detected: {bool(seo_analysis.slug)}")
-        print(f"H2 headings: {seo_analysis.h2_count}")
-        print(f"H3 headings: {seo_analysis.h3_count}")
-        print(f"FAQ items: {seo_analysis.faq_count}")
-        print(f"Summary section detected: {seo_analysis.has_summary}")
+    print(f"Product article generated: {bool(product_article and product_article.is_generated)}")
+    if product_article is not None:
+        print(f"Product article type: {product_article.article_type}")
+        print(f"Product article characters: {product_article.character_count}")
+    print(f"Problem SEO ready: {bool(problem_seo_analysis and problem_seo_analysis.is_ready)}")
+    if problem_seo_analysis is not None:
+        print(f"Problem SEO title detected: {bool(problem_seo_analysis.seo_title)}")
+        print(
+            "Problem meta description detected: "
+            f"{bool(problem_seo_analysis.meta_description)}"
+        )
+        print(f"Problem slug detected: {bool(problem_seo_analysis.slug)}")
+        print(f"Problem H2 headings: {problem_seo_analysis.h2_count}")
+        print(f"Problem H3 headings: {problem_seo_analysis.h3_count}")
+        print(f"Problem FAQ items: {problem_seo_analysis.faq_count}")
+        print(f"Problem summary section detected: {problem_seo_analysis.has_summary}")
+    print(f"Product SEO ready: {bool(product_seo_analysis and product_seo_analysis.is_ready)}")
+    if product_seo_analysis is not None:
+        print(f"Product SEO title detected: {bool(product_seo_analysis.seo_title)}")
+        print(
+            "Product meta description detected: "
+            f"{bool(product_seo_analysis.meta_description)}"
+        )
+        print(f"Product slug detected: {bool(product_seo_analysis.slug)}")
+        print(f"Product H2 headings: {product_seo_analysis.h2_count}")
+        print(f"Product H3 headings: {product_seo_analysis.h3_count}")
+        print(f"Product FAQ items: {product_seo_analysis.faq_count}")
+        print(f"Product summary section detected: {product_seo_analysis.has_summary}")
     print(f"Rakuten products: {len(products)}")
     print(f"Product prompt ready: {bool(product_result and product_result.prompt_text)}")
     print(f"Rakuten connected: {not rakuten_error}")
