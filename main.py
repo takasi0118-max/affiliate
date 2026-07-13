@@ -2,11 +2,14 @@
 
 import logging
 
+import requests
+
 from config.settings import PROJECT_ROOT, load_settings
 from config.site_config import load_site_config
 from google.genai import errors
 from providers.gemini_provider import GeminiApiError, GeminiProvider
 from providers.rakuten_provider import RakutenApiError, RakutenProduct, RakutenProvider
+from providers.wordpress_provider import WordPressApiError, WordPressProvider
 from services.article_generator import ArticleGenerator
 from services.prompt_manager import PromptManager
 from services.site_manager import SiteManager
@@ -85,8 +88,23 @@ def main() -> None:
         prompt_manager=prompt_manager,
         gemini_provider=gemini_provider,
     )
+    # WordPressProviderはWordPress REST APIとの通信だけを担当する。
+    # STEP08では安全のため投稿はせず、認証付きで接続できるかだけ確認する。
+    wordpress_provider = WordPressProvider(
+        site_url=settings.wordpress_url,
+        username=settings.wordpress_username,
+        app_password=settings.wordpress_app_password,
+    )
 
     # 未処理テーマがある場合だけ、商品取得から記事生成までの確認処理を行う。
+    wordpress_error = ""
+    try:
+        wordpress_provider.test_connection()
+    except (WordPressApiError, requests.RequestException) as error:
+        logger.error("WordPress API connection failed: %s", error)
+        # WordPress接続に失敗しても、楽天/Geminiの確認結果は表示できるようにする。
+        wordpress_error = str(error)
+
     if next_theme is not None:
         # エラー文字列を空で初期化しておき、失敗した時だけ内容を入れる。
         # 最後のprintで空かどうかを見れば、接続成功/失敗を判定できる。
@@ -140,6 +158,9 @@ def main() -> None:
     print(f"Gemini connected: {not gemini_error}")
     if gemini_error:
         print(f"Gemini error: {gemini_error}")
+    print(f"WordPress connected: {not wordpress_error}")
+    if wordpress_error:
+        print(f"WordPress error: {wordpress_error}")
 
 
 if __name__ == "__main__":
