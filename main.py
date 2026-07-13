@@ -17,6 +17,7 @@ from services.product_service import ProductService
 from services.prompt_manager import PromptManager
 from services.seo_service import SeoService
 from services.site_manager import SiteManager
+from services.wordpress_post_service import WordPressPostService
 from utils.logger import setup_logging
 
 
@@ -76,9 +77,12 @@ def main() -> None:
         username=settings.wordpress_username,
         app_password=settings.wordpress_app_password,
     )
+    # WordPressPostServiceは、生成済み記事をWordPressの下書きへ登録する担当。
+    wordpress_post_service = WordPressPostService(wordpress_provider)
 
     # 未処理テーマがある場合だけ、商品取得から記事生成までの確認処理を行う。
     wordpress_error = ""
+    wordpress_post_result = None
     try:
         wordpress_provider.test_connection()
     except (WordPressApiError, requests.RequestException) as error:
@@ -162,6 +166,21 @@ def main() -> None:
                 ranking_seo=ranking_seo_analysis,
                 output_dir=site_config.output_dir,
             )
+
+            # STEP16では、WordPress接続が成功している場合だけ下書き投稿を作成する。
+            # status=draftなので公開はされず、管理画面で内容確認できる状態になる。
+            if not wordpress_error:
+                try:
+                    wordpress_post_result = wordpress_post_service.create_draft_post_set(
+                        articles=linked_articles,
+                        problem_seo=problem_seo_analysis,
+                        product_seo=product_seo_analysis,
+                        ranking_seo=ranking_seo_analysis,
+                    )
+                except (WordPressApiError, requests.RequestException) as error:
+                    logger.error("WordPress draft posting failed: %s", error)
+                    wordpress_post_result = None
+                    wordpress_error = str(error)
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
@@ -170,6 +189,7 @@ def main() -> None:
             ranking_article = None
             linked_articles = None
             markdown_result = None
+            wordpress_post_result = None
             gemini_error = str(error)
             problem_seo_analysis = None
             product_seo_analysis = None
@@ -185,6 +205,7 @@ def main() -> None:
         ranking_article = None
         linked_articles = None
         markdown_result = None
+        wordpress_post_result = None
         problem_seo_analysis = None
         product_seo_analysis = None
         ranking_seo_analysis = None
@@ -257,6 +278,15 @@ def main() -> None:
         print(f"Problem markdown: {markdown_result.problem.path}")
         print(f"Product markdown: {markdown_result.product.path}")
         print(f"Ranking markdown: {markdown_result.ranking.path}")
+    print(
+        "WordPress drafts created: "
+        f"{bool(wordpress_post_result and wordpress_post_result.is_ready)}"
+    )
+    if wordpress_post_result is not None:
+        print(f"WordPress draft posts: {wordpress_post_result.count}")
+        print(f"Problem WordPress post ID: {wordpress_post_result.problem.post_id}")
+        print(f"Product WordPress post ID: {wordpress_post_result.product.post_id}")
+        print(f"Ranking WordPress post ID: {wordpress_post_result.ranking.post_id}")
     print(f"Rakuten products: {len(products)}")
     print(f"Product prompt ready: {bool(product_result and product_result.prompt_text)}")
     print(f"Rakuten connected: {not rakuten_error}")

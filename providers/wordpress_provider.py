@@ -30,6 +30,8 @@ class WordPressProvider:
         self,
         title: str,
         content: str,
+        slug: str = "",
+        excerpt: str = "",
         categories: list[int] | None = None,
         tags: list[int] | None = None,
     ) -> int:
@@ -40,6 +42,10 @@ class WordPressProvider:
             "content": content,
             "status": "draft",
         }
+        if slug:
+            payload["slug"] = slug
+        if excerpt:
+            payload["excerpt"] = excerpt
         if categories:
             payload["categories"] = categories
         if tags:
