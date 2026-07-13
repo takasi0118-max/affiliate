@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 class RakutenProduct:
     """Product information returned from Rakuten Ichiba API."""
 
+    # 記事生成に使う最低限の商品情報だけをここにまとめる。
+    # APIレスポンスをそのまま使うより、必要な項目名に整理した方が後続処理が読みやすい。
     name: str
     price: int
     url: str
@@ -31,10 +33,12 @@ class RakutenApiError(Exception):
 class RakutenProvider:
     """Client for Rakuten Ichiba item search API."""
 
+    # 楽天市場の商品検索APIのURL。商品名や価格などをキーワード検索できる。
     API_URL = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401"
 
     def __init__(self, application_id: str, access_key: str, affiliate_id: str) -> None:
         """Initialize the provider with Rakuten credentials."""
+        # 認証情報は直接コードに書かず、.env -> Settings -> main.py経由で受け取る。
         self.application_id = application_id
         self.access_key = access_key
         self.affiliate_id = affiliate_id
@@ -47,6 +51,7 @@ class RakutenProvider:
     )
     def search_items(self, keyword: str, hits: int = 5) -> list[RakutenProduct]:
         """Search Rakuten Ichiba items by keyword."""
+        # 楽天APIへ送る検索条件。認証情報は.envから読み込んだ値を使う。
         params = {
             "applicationId": self.application_id,
             "accessKey": self.access_key,
@@ -56,29 +61,35 @@ class RakutenProvider:
             "format": "json",
             "formatVersion": 2,
         }
+        # ネットワーク系の失敗はretryデコレータで最大3回まで再試行する。
         response = requests.get(self.API_URL, params=params, timeout=15)
         self._raise_for_api_error(response)
 
+        # 楽天APIのJSONレスポンスからItems配列だけを取り出す。
         data = response.json()
         items = data.get("Items", [])
         if not isinstance(items, list):
             raise ValueError("Rakuten API response does not contain an item list.")
 
+        # 取得した商品を1件ずつRakutenProductへ変換し、main.pyへ返す。
         return [self._parse_product(item) for item in items]
 
     @staticmethod
     def _raise_for_api_error(response: requests.Response) -> None:
         """Raise sanitized errors without exposing API credentials."""
+        # 正常系はそのまま呼び出し元へ戻し、400以上だけ例外へ変換する。
         if response.status_code < 400:
             return
 
         message = _extract_error_message(response)
+        # 5xxは一時的なサーバー障害の可能性があるためrequests系例外として扱う。
         if response.status_code >= 500:
             raise requests.HTTPError(
                 f"Rakuten API server error {response.status_code}: {message}",
                 response=response,
             )
 
+        # 400番台はID間違い・パラメータ不足など、こちらの設定や入力が原因のことが多い。
         raise RakutenApiError(
             f"Rakuten API request error {response.status_code}: {message}"
         )
@@ -86,6 +97,7 @@ class RakutenProvider:
     @staticmethod
     def _parse_product(item: dict[str, Any]) -> RakutenProduct:
         """Convert a Rakuten API item into a RakutenProduct."""
+        # APIレスポンスのキー名を、アプリ内で扱いやすい商品データへ詰め替える。
         image_urls = item.get("mediumImageUrls") or []
         image_url = None
         if image_urls and isinstance(image_urls[0], str):
@@ -103,6 +115,7 @@ class RakutenProvider:
 
 def _to_optional_float(value: Any) -> float | None:
     """Convert a value to float when possible."""
+    # レビュー平均のように、値が無い場合もある項目はNoneとして扱う。
     if value in (None, ""):
         return None
     try:
@@ -113,6 +126,7 @@ def _to_optional_float(value: Any) -> float | None:
 
 def _to_optional_int(value: Any) -> int | None:
     """Convert a value to int when possible."""
+    # レビュー件数のように、値が無い場合もある項目はNoneとして扱う。
     if value in (None, ""):
         return None
     try:
@@ -123,11 +137,13 @@ def _to_optional_int(value: Any) -> int | None:
 
 def _extract_error_message(response: requests.Response) -> str:
     """Extract a concise error message from a Rakuten API response."""
+    # 楽天APIのエラー本文はJSONの場合が多いので、まずJSONとして読んでみる。
     try:
         data = response.json()
     except ValueError:
         return response.text[:200] or "No error detail returned."
 
+    # よく使われるエラー項目名を順番に見て、見つかったものを表示用メッセージにする。
     for key in ("error_description", "error", "message"):
         value = data.get(key)
         if value:
