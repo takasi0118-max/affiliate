@@ -12,6 +12,7 @@ from providers.rakuten_provider import RakutenApiError, RakutenProvider
 from providers.wordpress_provider import WordPressApiError, WordPressProvider
 from services.article_generator import ArticleGenerator
 from services.internal_link_service import InternalLinkService
+from services.markdown_service import MarkdownService
 from services.product_service import ProductService
 from services.prompt_manager import PromptManager
 from services.seo_service import SeoService
@@ -66,6 +67,8 @@ def main() -> None:
     seo_service = SeoService()
     # InternalLinkServiceは、3記事のslugを使って関連記事リンクを追加する担当。
     internal_link_service = InternalLinkService()
+    # MarkdownServiceは、生成済み記事を人が確認できる.mdファイルとして保存する担当。
+    markdown_service = MarkdownService()
     # WordPressProviderはWordPress REST APIとの通信だけを担当する。
     # STEP08では安全のため投稿はせず、認証付きで接続できるかだけ確認する。
     wordpress_provider = WordPressProvider(
@@ -150,6 +153,15 @@ def main() -> None:
             problem_article = linked_articles.problem_article
             product_article = linked_articles.product_article
             ranking_article = linked_articles.ranking_article
+
+            # STEP15では、内部リンク適用後の3記事をMarkdownファイルとして保存する。
+            markdown_result = markdown_service.save_article_set(
+                articles=linked_articles,
+                problem_seo=problem_seo_analysis,
+                product_seo=product_seo_analysis,
+                ranking_seo=ranking_seo_analysis,
+                output_dir=site_config.output_dir,
+            )
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
@@ -157,6 +169,7 @@ def main() -> None:
             product_article = None
             ranking_article = None
             linked_articles = None
+            markdown_result = None
             gemini_error = str(error)
             problem_seo_analysis = None
             product_seo_analysis = None
@@ -171,6 +184,7 @@ def main() -> None:
         product_article = None
         ranking_article = None
         linked_articles = None
+        markdown_result = None
         problem_seo_analysis = None
         product_seo_analysis = None
         ranking_seo_analysis = None
@@ -237,6 +251,12 @@ def main() -> None:
     print(f"Internal links ready: {bool(linked_articles and linked_articles.is_ready)}")
     if linked_articles is not None:
         print(f"Internal links: {linked_articles.link_count}")
+    print(f"Markdown saved: {bool(markdown_result and markdown_result.is_ready)}")
+    if markdown_result is not None:
+        print(f"Markdown files: {markdown_result.count}")
+        print(f"Problem markdown: {markdown_result.problem.path}")
+        print(f"Product markdown: {markdown_result.product.path}")
+        print(f"Ranking markdown: {markdown_result.ranking.path}")
     print(f"Rakuten products: {len(products)}")
     print(f"Product prompt ready: {bool(product_result and product_result.prompt_text)}")
     print(f"Rakuten connected: {not rakuten_error}")
