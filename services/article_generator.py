@@ -1,7 +1,31 @@
 """Article generation service using prompt templates and Gemini."""
 
+from dataclasses import dataclass
+
 from providers.gemini_provider import GeminiProvider
 from services.prompt_manager import PromptManager
+
+
+@dataclass(frozen=True)
+class GeneratedArticle:
+    """Generated article content with basic article metadata."""
+
+    # themeは、themes.txtから選ばれた記事テーマ。
+    theme: str
+    # article_typeはproblem/product/rankingのような記事種別。
+    article_type: str
+    # contentはGeminiが生成したMarkdown本文。
+    content: str
+
+    @property
+    def character_count(self) -> int:
+        """Return the number of characters in the generated article."""
+        return len(self.content)
+
+    @property
+    def is_generated(self) -> bool:
+        """Return whether the article body was generated."""
+        return bool(self.content.strip())
 
 
 class ArticleGenerator:
@@ -24,7 +48,7 @@ class ArticleGenerator:
         category: str,
         tags: list[str],
         products: str,
-    ) -> str:
+    ) -> GeneratedArticle:
         """Generate a problem-solving article."""
         # 悩み記事は、読者の不安や失敗例から解決策へつなげる集客用の記事。
         return self._generate_article(
@@ -42,7 +66,7 @@ class ArticleGenerator:
         category: str,
         tags: list[str],
         products: str,
-    ) -> str:
+    ) -> GeneratedArticle:
         """Generate a product introduction article."""
         # 商品紹介記事は、楽天商品を個別に説明して購入判断を助ける記事。
         return self._generate_article(
@@ -60,7 +84,7 @@ class ArticleGenerator:
         category: str,
         tags: list[str],
         products: str,
-    ) -> str:
+    ) -> GeneratedArticle:
         """Generate a comparison ranking article."""
         # 比較記事は、複数商品をランキングや表で比べる購入直前向けの記事。
         return self._generate_article(
@@ -80,7 +104,7 @@ class ArticleGenerator:
         category: str,
         tags: list[str],
         products: str,
-    ) -> str:
+    ) -> GeneratedArticle:
         """Build a prompt and generate an article from it."""
         # 共通SEO指示、共通記事構成、サイト別プロンプトを結合して最終プロンプトを作る。
         # variablesの値が、prompt内の{theme}や{products}に差し込まれる。
@@ -95,4 +119,9 @@ class ArticleGenerator:
             },
         )
         # Providerを経由してLLMへの通信を隠蔽し、記事生成サービス側は本文だけ受け取る。
-        return self.gemini_provider.generate_text(prompt)
+        content = self.gemini_provider.generate_text(prompt)
+        return GeneratedArticle(
+            theme=theme,
+            article_type=article_type,
+            content=content,
+        )

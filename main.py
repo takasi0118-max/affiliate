@@ -100,8 +100,8 @@ def main() -> None:
             rakuten_error = str(error)
 
         try:
-            # 現時点では疎通確認として悩み記事を1本生成し、SEOチェックにも使う。
-            sample_article = article_generator.generate_problem_article(
+            # STEP11では、1テーマ目の正式な悩み記事を生成する。
+            problem_article = article_generator.generate_problem_article(
                 theme=next_theme,
                 category=site_manager.get_default_category(),
                 tags=site_manager.get_default_tags(),
@@ -111,12 +111,12 @@ def main() -> None:
                     else ProductService.format_products_for_prompt(products)
                 ),
             )
-            # STEP09では、生成記事からSEOメタ情報と見出し構成を読み取って確認する。
-            seo_analysis = seo_service.analyze_article(sample_article)
+            # 生成した悩み記事からSEOメタ情報と見出し構成を読み取って確認する。
+            seo_analysis = seo_service.analyze_article(problem_article.content)
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
-            sample_article = ""
+            problem_article = None
             gemini_error = str(error)
             seo_analysis = None
     else:
@@ -125,7 +125,7 @@ def main() -> None:
         product_result = None
         rakuten_error = ""
         gemini_error = ""
-        sample_article = ""
+        problem_article = None
         seo_analysis = None
 
     # 実行結果をターミナルへ出し、どこまで接続できたかを確認しやすくする。
@@ -139,7 +139,10 @@ def main() -> None:
     print(f"Default tags: {len(site_manager.get_default_tags())}")
     print(f"History records: {len(site_manager.history)}")
     print(f"Prompt templates: {len(available_prompts)}")
-    print(f"Sample article generated: {bool(sample_article)}")
+    print(f"Problem article generated: {bool(problem_article and problem_article.is_generated)}")
+    if problem_article is not None:
+        print(f"Problem article type: {problem_article.article_type}")
+        print(f"Problem article characters: {problem_article.character_count}")
     print(f"SEO ready: {bool(seo_analysis and seo_analysis.is_ready)}")
     if seo_analysis is not None:
         print(f"SEO title detected: {bool(seo_analysis.seo_title)}")
