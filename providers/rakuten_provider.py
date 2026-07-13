@@ -1,0 +1,136 @@
+"""Rakuten Ichiba API provider."""
+
+from dataclasses import dataclass
+from typing import Any
+import logging
+
+import requests
+
+from utils.retry import retry
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RakutenProduct:
+    """Product information returned from Rakuten Ichiba API."""
+
+    name: str
+    price: int
+    url: str
+    image_url: str | None
+    review_average: float | None
+    review_count: int | None
+
+
+class RakutenApiError(Exception):
+    """Raised when Rakuten API returns an application-level error."""
+
+
+class RakutenProvider:
+    """Client for Rakuten Ichiba item search API."""
+
+    API_URL = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401"
+
+    def __init__(self, application_id: str, access_key: str, affiliate_id: str) -> None:
+        """Initialize the provider with Rakuten credentials."""
+        self.application_id = application_id
+        self.access_key = access_key
+        self.affiliate_id = affiliate_id
+
+    @retry(
+        max_attempts=3,
+        delay_seconds=1.0,
+        exceptions=(requests.RequestException,),
+        logger=logger,
+    )
+    def search_items(self, keyword: str, hits: int = 5) -> list[RakutenProduct]:
+        """Search Rakuten Ichiba items by keyword."""
+        params = {
+            "applicationId": self.application_id,
+            "accessKey": self.access_key,
+            "affiliateId": self.affiliate_id,
+            "keyword": keyword,
+            "hits": hits,
+            "format": "json",
+            "formatVersion": 2,
+        }
+        response = requests.get(self.API_URL, params=params, timeout=15)
+        self._raise_for_api_error(response)
+
+        data = response.json()
+        items = data.get("Items", [])
+        if not isinstance(items, list):
+            raise ValueError("Rakuten API response does not contain an item list.")
+
+        return [self._parse_product(item) for item in items]
+
+    @staticmethod
+    def _raise_for_api_error(response: requests.Response) -> None:
+        """Raise sanitized errors without exposing API credentials."""
+        if response.status_code < 400:
+            return
+
+        message = _extract_error_message(response)
+        if response.status_code >= 500:
+            raise requests.HTTPError(
+                f"Rakuten API server error {response.status_code}: {message}",
+                response=response,
+            )
+
+        raise RakutenApiError(
+            f"Rakuten API request error {response.status_code}: {message}"
+        )
+
+    @staticmethod
+    def _parse_product(item: dict[str, Any]) -> RakutenProduct:
+        """Convert a Rakuten API item into a RakutenProduct."""
+        image_urls = item.get("mediumImageUrls") or []
+        image_url = None
+        if image_urls and isinstance(image_urls[0], str):
+            image_url = image_urls[0]
+
+        return RakutenProduct(
+            name=str(item.get("itemName", "")),
+            price=int(item.get("itemPrice", 0)),
+            url=str(item.get("affiliateUrl") or item.get("itemUrl") or ""),
+            image_url=image_url,
+            review_average=_to_optional_float(item.get("reviewAverage")),
+            review_count=_to_optional_int(item.get("reviewCount")),
+        )
+
+
+def _to_optional_float(value: Any) -> float | None:
+    """Convert a value to float when possible."""
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_optional_int(value: Any) -> int | None:
+    """Convert a value to int when possible."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_error_message(response: requests.Response) -> str:
+    """Extract a concise error message from a Rakuten API response."""
+    try:
+        data = response.json()
+    except ValueError:
+        return response.text[:200] or "No error detail returned."
+
+    for key in ("error_description", "error", "message"):
+        value = data.get(key)
+        if value:
+            return str(value)
+
+    return "No error detail returned."
