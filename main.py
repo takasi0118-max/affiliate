@@ -124,14 +124,26 @@ def main() -> None:
             )
             # 商品記事もSEO要素を満たしているか確認する。
             product_seo_analysis = seo_service.analyze_article(product_article.content)
+
+            # STEP13では、同じ商品情報を比較表とランキング形式の記事にも使う。
+            ranking_article = article_generator.generate_ranking_article(
+                theme=next_theme,
+                category=site_manager.get_default_category(),
+                tags=site_manager.get_default_tags(),
+                products=product_prompt_text,
+            )
+            # 比較記事もSEO要素を満たしているか確認する。
+            ranking_seo_analysis = seo_service.analyze_article(ranking_article.content)
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
             problem_article = None
             product_article = None
+            ranking_article = None
             gemini_error = str(error)
             problem_seo_analysis = None
             product_seo_analysis = None
+            ranking_seo_analysis = None
     else:
         # すべてのテーマが処理済みなら、API通信は行わずに結果表示だけ行う。
         products = []
@@ -140,8 +152,10 @@ def main() -> None:
         gemini_error = ""
         problem_article = None
         product_article = None
+        ranking_article = None
         problem_seo_analysis = None
         product_seo_analysis = None
+        ranking_seo_analysis = None
 
     # 実行結果をターミナルへ出し、どこまで接続できたかを確認しやすくする。
     logger.info("Configuration loaded for site: %s", site_config.site_key)
@@ -162,6 +176,10 @@ def main() -> None:
     if product_article is not None:
         print(f"Product article type: {product_article.article_type}")
         print(f"Product article characters: {product_article.character_count}")
+    print(f"Ranking article generated: {bool(ranking_article and ranking_article.is_generated)}")
+    if ranking_article is not None:
+        print(f"Ranking article type: {ranking_article.article_type}")
+        print(f"Ranking article characters: {ranking_article.character_count}")
     print(f"Problem SEO ready: {bool(problem_seo_analysis and problem_seo_analysis.is_ready)}")
     if problem_seo_analysis is not None:
         print(f"Problem SEO title detected: {bool(problem_seo_analysis.seo_title)}")
@@ -186,6 +204,18 @@ def main() -> None:
         print(f"Product H3 headings: {product_seo_analysis.h3_count}")
         print(f"Product FAQ items: {product_seo_analysis.faq_count}")
         print(f"Product summary section detected: {product_seo_analysis.has_summary}")
+    print(f"Ranking SEO ready: {bool(ranking_seo_analysis and ranking_seo_analysis.is_ready)}")
+    if ranking_seo_analysis is not None:
+        print(f"Ranking SEO title detected: {bool(ranking_seo_analysis.seo_title)}")
+        print(
+            "Ranking meta description detected: "
+            f"{bool(ranking_seo_analysis.meta_description)}"
+        )
+        print(f"Ranking slug detected: {bool(ranking_seo_analysis.slug)}")
+        print(f"Ranking H2 headings: {ranking_seo_analysis.h2_count}")
+        print(f"Ranking H3 headings: {ranking_seo_analysis.h3_count}")
+        print(f"Ranking FAQ items: {ranking_seo_analysis.faq_count}")
+        print(f"Ranking summary section detected: {ranking_seo_analysis.has_summary}")
     print(f"Rakuten products: {len(products)}")
     print(f"Product prompt ready: {bool(product_result and product_result.prompt_text)}")
     print(f"Rakuten connected: {not rakuten_error}")
