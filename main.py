@@ -8,9 +8,10 @@ from config.settings import PROJECT_ROOT, load_settings
 from config.site_config import load_site_config
 from google.genai import errors
 from providers.gemini_provider import GeminiApiError, GeminiProvider
-from providers.rakuten_provider import RakutenApiError, RakutenProduct, RakutenProvider
+from providers.rakuten_provider import RakutenApiError, RakutenProvider
 from providers.wordpress_provider import WordPressApiError, WordPressProvider
 from services.article_generator import ArticleGenerator
+from services.product_service import ProductService
 from services.prompt_manager import PromptManager
 from services.seo_service import SeoService
 from services.site_manager import SiteManager
@@ -18,37 +19,6 @@ from utils.logger import setup_logging
 
 
 logger = logging.getLogger(__name__)
-
-
-def _format_products_for_prompt(products: list[RakutenProduct]) -> str:
-    """Format Rakuten products for article prompts."""
-    # 楽天APIから商品が返らなかった場合でも、Geminiに渡す文章は空にしない。
-    # 空文字を渡すより「取得できなかった」と明示した方が、生成結果の意図が分かりやすい。
-    if not products:
-        return "楽天APIから関連商品を取得できませんでした。"
-
-    # Geminiへ渡すため、商品オブジェクトを記事生成用の箇条書きテキストに整える。
-    lines: list[str] = []
-    for index, product in enumerate(products, start=1):
-        # レビュー情報は商品によって無い場合があるため、初期値を用意しておく。
-        review = "レビュー情報なし"
-        if product.review_average is not None and product.review_count is not None:
-            review = f"レビュー平均: {product.review_average} / 件数: {product.review_count}"
-
-        # 1商品ごとに、記事内で使いやすい情報だけを日本語の箇条書きにする。
-        lines.append(
-            "\n".join(
-                [
-                    f"{index}. {product.name}",
-                    f"   - 価格: {product.price}円",
-                    f"   - URL: {product.url}",
-                    f"   - 画像URL: {product.image_url or 'なし'}",
-                    f"   - {review}",
-                ]
-            )
-        )
-
-    return "\n\n".join(lines)
 
 
 def main() -> None:
@@ -79,6 +49,8 @@ def main() -> None:
         access_key=settings.rakuten_access_key,
         affiliate_id=settings.rakuten_affiliate_id,
     )
+    # ProductServiceは楽天商品を取得し、記事生成で使いやすい文章へ整える担当。
+    product_service = ProductService(rakuten_provider)
     # GeminiProviderはGemini APIとの通信だけを担当する。
     gemini_provider = GeminiProvider(
         api_key=settings.gemini_api_key,
@@ -115,11 +87,16 @@ def main() -> None:
         gemini_error = ""
         try:
             # 記事テーマに関連する楽天商品を取得し、商品紹介の材料にする。
-            products = rakuten_provider.search_items(keyword=next_theme, hits=5)
+            product_result = product_service.search_for_article(
+                keyword=next_theme,
+                hits=5,
+            )
+            products = product_result.products
         except RakutenApiError as error:
             logger.error("Rakuten API request failed: %s", error)
             # 楽天APIが失敗しても、アプリ全体は止めずにGemini疎通確認へ進める。
             products = []
+            product_result = None
             rakuten_error = str(error)
 
         try:
@@ -128,7 +105,11 @@ def main() -> None:
                 theme=next_theme,
                 category=site_manager.get_default_category(),
                 tags=site_manager.get_default_tags(),
-                products=_format_products_for_prompt(products),
+                products=(
+                    product_result.prompt_text
+                    if product_result is not None
+                    else ProductService.format_products_for_prompt(products)
+                ),
             )
             # STEP09では、生成記事からSEOメタ情報と見出し構成を読み取って確認する。
             seo_analysis = seo_service.analyze_article(sample_article)
@@ -141,6 +122,7 @@ def main() -> None:
     else:
         # すべてのテーマが処理済みなら、API通信は行わずに結果表示だけ行う。
         products = []
+        product_result = None
         rakuten_error = ""
         gemini_error = ""
         sample_article = ""
@@ -168,6 +150,7 @@ def main() -> None:
         print(f"FAQ items: {seo_analysis.faq_count}")
         print(f"Summary section detected: {seo_analysis.has_summary}")
     print(f"Rakuten products: {len(products)}")
+    print(f"Product prompt ready: {bool(product_result and product_result.prompt_text)}")
     print(f"Rakuten connected: {not rakuten_error}")
     if rakuten_error:
         print(f"Rakuten error: {rakuten_error}")
