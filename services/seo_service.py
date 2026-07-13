@@ -1,0 +1,120 @@
+"""SEO metadata extraction and checklist service."""
+
+from dataclasses import dataclass
+import re
+
+
+@dataclass(frozen=True)
+class SeoAnalysis:
+    """SEO information extracted from a generated Markdown article."""
+
+    # Geminiが出力した記事から取り出したSEOメタ情報。
+    seo_title: str
+    meta_description: str
+    slug: str
+    # 見出しやFAQの数を数え、最低限の記事構成があるか確認する。
+    h2_count: int
+    h3_count: int
+    faq_count: int
+    has_summary: bool
+
+    @property
+    def is_ready(self) -> bool:
+        """Return whether the article has the minimum SEO elements."""
+        # STEP09では、公開前チェックの土台として最低限のSEO要素だけ判定する。
+        return all(
+            [
+                self.seo_title,
+                self.meta_description,
+                self.slug,
+                self.h2_count > 0,
+                self.h3_count > 0,
+                self.faq_count >= 3,
+                self.has_summary,
+            ]
+        )
+
+
+class SeoService:
+    """Analyze generated Markdown articles for SEO readiness."""
+
+    def analyze_article(self, article: str) -> SeoAnalysis:
+        """Extract SEO metadata and checklist values from an article."""
+        # Geminiの出力を人が確認しやすいよう、機械的に拾える項目だけを集計する。
+        lines = article.splitlines()
+        return SeoAnalysis(
+            seo_title=_extract_labeled_value(
+                lines,
+                ("SEOタイトル", "SEO タイトル", "seo title", "title", "タイトル"),
+            ),
+            meta_description=_extract_labeled_value(
+                lines,
+                ("meta description", "メタディスクリプション"),
+            ),
+            slug=_extract_labeled_value(lines, ("slug", "スラッグ")),
+            h2_count=sum(1 for line in lines if line.startswith("## ")),
+            h3_count=sum(1 for line in lines if line.startswith("### ")),
+            faq_count=_count_faq_items(lines),
+            has_summary=_has_summary_heading(lines),
+        )
+
+
+def _extract_labeled_value(lines: list[str], labels: tuple[str, ...]) -> str:
+    """Extract a value written as 'label: value' from Markdown lines."""
+    # SEOタイトル: xxx のような行を探す。全角コロンにも対応する。
+    for line in lines:
+        normalized_line = line.strip().lstrip("-*").strip()
+        for label in labels:
+            pattern = rf"^{re.escape(label)}\s*[:：]\s*(.+)$"
+            match = re.match(pattern, normalized_line, flags=re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+    return ""
+
+
+def _count_faq_items(lines: list[str]) -> int:
+    """Count likely FAQ questions in an article."""
+    faq_count = 0
+    in_faq_section = False
+
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line.startswith("## ") and "FAQ" in stripped_line.upper():
+            in_faq_section = True
+            continue
+        if in_faq_section and stripped_line.startswith("## "):
+            in_faq_section = False
+
+        # FAQ見出し配下にある「Q:」「Q1:」「？」を質問として数える。
+        if in_faq_section and _looks_like_question(stripped_line):
+            faq_count += 1
+
+    if faq_count:
+        return faq_count
+
+    # FAQ見出しが無い場合でも、記事全体から質問らしい行を拾って最低限判定する。
+    return sum(1 for line in lines if _looks_like_question(line.strip()))
+
+
+def _looks_like_question(line: str) -> bool:
+    """Return whether a line looks like an FAQ question."""
+    if not line:
+        return False
+    normalized_line = line.lstrip("#-*0123456789. ").strip()
+    return bool(
+        re.match(r"^Q\d*\s*[:：.]", normalized_line, flags=re.IGNORECASE)
+        or "?" in normalized_line
+        or "？" in normalized_line
+    )
+
+
+def _has_summary_heading(lines: list[str]) -> bool:
+    """Return whether the article contains a summary section."""
+    # 「まとめ」または英語のSummary見出しがあれば、記事の締めがあると判定する。
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line.startswith(("## ", "### ")) and (
+            "まとめ" in stripped_line or "summary" in stripped_line.lower()
+        ):
+            return True
+    return False

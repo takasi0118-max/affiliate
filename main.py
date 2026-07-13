@@ -2,13 +2,17 @@
 
 import logging
 
+import requests
+
 from config.settings import PROJECT_ROOT, load_settings
 from config.site_config import load_site_config
 from google.genai import errors
 from providers.gemini_provider import GeminiApiError, GeminiProvider
 from providers.rakuten_provider import RakutenApiError, RakutenProduct, RakutenProvider
+from providers.wordpress_provider import WordPressApiError, WordPressProvider
 from services.article_generator import ArticleGenerator
 from services.prompt_manager import PromptManager
+from services.seo_service import SeoService
 from services.site_manager import SiteManager
 from utils.logger import setup_logging
 
@@ -85,8 +89,25 @@ def main() -> None:
         prompt_manager=prompt_manager,
         gemini_provider=gemini_provider,
     )
+    # SeoServiceは、生成された記事にSEOタイトルやFAQが含まれているか確認する担当。
+    seo_service = SeoService()
+    # WordPressProviderはWordPress REST APIとの通信だけを担当する。
+    # STEP08では安全のため投稿はせず、認証付きで接続できるかだけ確認する。
+    wordpress_provider = WordPressProvider(
+        site_url=settings.wordpress_url,
+        username=settings.wordpress_username,
+        app_password=settings.wordpress_app_password,
+    )
 
     # 未処理テーマがある場合だけ、商品取得から記事生成までの確認処理を行う。
+    wordpress_error = ""
+    try:
+        wordpress_provider.test_connection()
+    except (WordPressApiError, requests.RequestException) as error:
+        logger.error("WordPress API connection failed: %s", error)
+        # WordPress接続に失敗しても、楽天/Geminiの確認結果は表示できるようにする。
+        wordpress_error = str(error)
+
     if next_theme is not None:
         # エラー文字列を空で初期化しておき、失敗した時だけ内容を入れる。
         # 最後のprintで空かどうかを見れば、接続成功/失敗を判定できる。
@@ -102,24 +123,28 @@ def main() -> None:
             rakuten_error = str(error)
 
         try:
-            # STEP07時点では疎通確認として悩み記事を1本生成する。
+            # 現時点では疎通確認として悩み記事を1本生成し、SEOチェックにも使う。
             sample_article = article_generator.generate_problem_article(
                 theme=next_theme,
                 category=site_manager.get_default_category(),
                 tags=site_manager.get_default_tags(),
                 products=_format_products_for_prompt(products),
             )
+            # STEP09では、生成記事からSEOメタ情報と見出し構成を読み取って確認する。
+            seo_analysis = seo_service.analyze_article(sample_article)
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
             sample_article = ""
             gemini_error = str(error)
+            seo_analysis = None
     else:
         # すべてのテーマが処理済みなら、API通信は行わずに結果表示だけ行う。
         products = []
         rakuten_error = ""
         gemini_error = ""
         sample_article = ""
+        seo_analysis = None
 
     # 実行結果をターミナルへ出し、どこまで接続できたかを確認しやすくする。
     logger.info("Configuration loaded for site: %s", site_config.site_key)
@@ -133,6 +158,15 @@ def main() -> None:
     print(f"History records: {len(site_manager.history)}")
     print(f"Prompt templates: {len(available_prompts)}")
     print(f"Sample article generated: {bool(sample_article)}")
+    print(f"SEO ready: {bool(seo_analysis and seo_analysis.is_ready)}")
+    if seo_analysis is not None:
+        print(f"SEO title detected: {bool(seo_analysis.seo_title)}")
+        print(f"Meta description detected: {bool(seo_analysis.meta_description)}")
+        print(f"Slug detected: {bool(seo_analysis.slug)}")
+        print(f"H2 headings: {seo_analysis.h2_count}")
+        print(f"H3 headings: {seo_analysis.h3_count}")
+        print(f"FAQ items: {seo_analysis.faq_count}")
+        print(f"Summary section detected: {seo_analysis.has_summary}")
     print(f"Rakuten products: {len(products)}")
     print(f"Rakuten connected: {not rakuten_error}")
     if rakuten_error:
@@ -140,6 +174,9 @@ def main() -> None:
     print(f"Gemini connected: {not gemini_error}")
     if gemini_error:
         print(f"Gemini error: {gemini_error}")
+    print(f"WordPress connected: {not wordpress_error}")
+    if wordpress_error:
+        print(f"WordPress error: {wordpress_error}")
 
 
 if __name__ == "__main__":
