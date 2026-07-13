@@ -1,6 +1,7 @@
 """SEO metadata extraction and checklist service."""
 
 from dataclasses import dataclass
+import json
 import re
 
 
@@ -42,16 +43,21 @@ class SeoService:
         """Extract SEO metadata and checklist values from an article."""
         # Geminiの出力を人が確認しやすいよう、機械的に拾える項目だけを集計する。
         lines = article.splitlines()
+        json_metadata = _extract_json_metadata(lines)
         return SeoAnalysis(
-            seo_title=_extract_labeled_value(
+            seo_title=json_metadata.get("title", "")
+            or _extract_labeled_value(
                 lines,
                 ("SEOタイトル", "SEO タイトル", "seo title", "title", "タイトル"),
             ),
-            meta_description=_extract_labeled_value(
+            meta_description=json_metadata.get("description", "")
+            or json_metadata.get("meta_description", "")
+            or _extract_labeled_value(
                 lines,
                 ("meta description", "メタディスクリプション"),
             ),
-            slug=_extract_labeled_value(lines, ("slug", "スラッグ")),
+            slug=json_metadata.get("slug", "")
+            or _extract_labeled_value(lines, ("slug", "スラッグ")),
             h2_count=sum(1 for line in lines if line.startswith("## ")),
             h3_count=sum(1 for line in lines if line.startswith("### ")),
             faq_count=_count_faq_items(lines),
@@ -70,6 +76,43 @@ def _extract_labeled_value(lines: list[str], labels: tuple[str, ...]) -> str:
             if match:
                 return match.group(1).strip()
     return ""
+
+
+def _extract_json_metadata(lines: list[str]) -> dict[str, str]:
+    """Extract SEO metadata when Gemini returns it as a JSON code block."""
+    # Geminiは指示通りの「SEOタイトル: ...」ではなく、JSONで返すことがある。
+    # その場合もtitle/description/slugを拾えるよう、先頭付近のJSONだけ解析する。
+    in_json_block = False
+    json_lines: list[str] = []
+    for line in lines[:30]:
+        stripped_line = line.strip()
+        if stripped_line.startswith("```json"):
+            in_json_block = True
+            json_lines = []
+            continue
+        if in_json_block and stripped_line.startswith("```"):
+            return _parse_json_metadata("\n".join(json_lines))
+        if in_json_block:
+            json_lines.append(line)
+
+    return {}
+
+
+def _parse_json_metadata(raw_json: str) -> dict[str, str]:
+    """Parse a JSON metadata block into string values."""
+    try:
+        data = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    return {
+        str(key): str(value).strip()
+        for key, value in data.items()
+        if isinstance(key, str) and value is not None
+    }
 
 
 def _count_faq_items(lines: list[str]) -> int:
