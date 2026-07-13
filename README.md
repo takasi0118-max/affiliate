@@ -15,7 +15,7 @@ Version1.0では防災グッズ専門サイトを対象にしつつ、将来ほ�
 
 1. テーマ入力
 2. 楽天APIから商品取得
-3. OpenAIで記事生成
+3. Geminiで記事生成
 4. Markdown保存
 5. 人が確認
 6. WordPress下書き投稿
@@ -24,7 +24,7 @@ Version1.0では防災グッズ専門サイトを対象にしつつ、将来ほ�
 ## 使用技術
 
 - Python 3.13.5
-- OpenAI API
+- Gemini API
 - 楽天市場API
 - WordPress REST API
 - requests
@@ -76,9 +76,9 @@ affiliate-system/
 
 - `docs/`: 仕様書、開発手順、運用ルール
 - `config/`: 環境変数やサイト設定の読み込み
-- `providers/`: OpenAI、楽天API、WordPressなど外部API通信
+- `providers/`: Gemini、楽天API、WordPressなど外部API通信
 - `services/`: 商品取得、記事生成、保存、投稿などの業務ロジック
-- `prompts/`: OpenAIへ渡すプロンプト
+- `prompts/`: Geminiへ渡すプロンプト
 - `sites/`: サイト別のテーマ、カテゴリ、タグ、生成履歴、出力先
 - `utils/`: ログ、リトライ、ファイル操作などの共通処理
 - `tests/`: テストコード

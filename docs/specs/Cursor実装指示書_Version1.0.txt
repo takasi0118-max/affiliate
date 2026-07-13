@@ -86,7 +86,7 @@ URL
 商品画像（可能なら）
 レビュー評価（可能なら）
 
-■OpenAI
+■Gemini
 
 generate_problem_article()
 generate_product_article()
@@ -109,12 +109,12 @@ printのみ
 ■エラー処理
 
 楽天API3回リトライ
-OpenAI2回リトライ
+Gemini2回リトライ
 WordPressはログ出力
 
 ■requirements.txt
 
-openai
+google-genai
 requests
 python-dotenv
 markdown
@@ -126,7 +126,7 @@ pandas
 インストール
 .env設定
 楽天API
-OpenAI API
+Gemini API
 WordPress設定
 実行方法
 
