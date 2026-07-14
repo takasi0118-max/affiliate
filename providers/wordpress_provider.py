@@ -58,6 +58,46 @@ class WordPressProvider:
             raise WordPressApiError("WordPress response did not contain a post ID.")
         return post_id
 
+    def update_post(
+        self,
+        post_id: int,
+        content: str,
+        title: str = "",
+        slug: str = "",
+        excerpt: str = "",
+    ) -> int:
+        """Update an existing WordPress post and return its post ID."""
+        # 既存の下書きをHTML版へ差し替える時に使う。statusは変更しないので公開状態はそのまま。
+        payload: dict[str, Any] = {
+            "content": content,
+        }
+        if title:
+            payload["title"] = title
+        if slug:
+            payload["slug"] = slug
+        if excerpt:
+            payload["excerpt"] = excerpt
+
+        response = self._request(
+            "POST",
+            f"/wp-json/wp/v2/posts/{post_id}",
+            json=payload,
+        )
+        data = response.json()
+        updated_post_id = data.get("id")
+        if not isinstance(updated_post_id, int):
+            raise WordPressApiError("WordPress response did not contain a post ID.")
+        return updated_post_id
+
+    def get_post(self, post_id: int) -> dict[str, Any]:
+        """Return one WordPress post response as a dictionary."""
+        # 更新後の確認用。title/status/linkなど、WordPress側の状態を読む。
+        response = self._request("GET", f"/wp-json/wp/v2/posts/{post_id}")
+        data = response.json()
+        if not isinstance(data, dict):
+            raise WordPressApiError("WordPress response did not contain post data.")
+        return data
+
     def _request(
         self,
         method: str,

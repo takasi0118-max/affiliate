@@ -1,10 +1,10 @@
 """WordPress draft posting service for generated articles."""
 
 from dataclasses import dataclass
-import re
 
 from providers.wordpress_provider import WordPressProvider
 from services.article_generator import GeneratedArticle
+from services.article_format_service import ArticleFormatService, clean_generated_markdown
 from services.internal_link_service import LinkedArticleSet
 from services.seo_service import SeoAnalysis
 
@@ -51,6 +51,8 @@ class WordPressPostService:
         """Initialize the service with a WordPress API provider."""
         # ProviderがAPI通信を担当し、このServiceは3記事投稿の流れを担当する。
         self.wordpress_provider = wordpress_provider
+        # ArticleFormatServiceは、Markdownを記事タイプ別HTMLへ整形する担当。
+        self.article_format_service = ArticleFormatService()
 
     def create_draft_post_set(
         self,
@@ -74,7 +76,10 @@ class WordPressPostService:
         """Create one WordPress draft post."""
         # SEOタイトルが読めない場合でも、テーマと記事種別から下書きタイトルを作る。
         title = seo.seo_title or _fallback_title(article)
-        content = _clean_post_content(article.content)
+        content = self.article_format_service.format_article(
+            article_type=article.article_type,
+            markdown_content=article.content,
+        )
         post_id = self.wordpress_provider.create_draft_post(
             title=title,
             content=content,
@@ -83,71 +88,36 @@ class WordPressPostService:
         )
         return PostedArticle(article_type=article.article_type, post_id=post_id)
 
+    def update_post_with_markdown(
+        self,
+        post_id: int,
+        markdown_content: str,
+        seo: SeoAnalysis,
+        article_type: str = "default",
+    ) -> int:
+        """Update an existing WordPress post with HTML converted from Markdown."""
+        # 既存のMarkdownをHTML化し、作成済み下書きの本文だけを差し替える。
+        html_content = self.article_format_service.format_article(
+            article_type=article_type,
+            markdown_content=markdown_content,
+        )
+        return self.wordpress_provider.update_post(
+            post_id=post_id,
+            content=html_content,
+            title=seo.seo_title,
+            slug=seo.slug,
+            excerpt=seo.meta_description,
+        )
+
 
 def _clean_post_content(content: str) -> str:
     """Remove generated metadata wrappers before sending content to WordPress."""
-    # WordPress本文には、管理用SEOメタ情報やMarkdownコードフェンスを入れない。
-    lines = content.strip().splitlines()
-    lines = _strip_json_metadata_block(lines)
-    lines = _strip_wrapping_code_fence(lines)
-    lines = _strip_front_matter_block(lines)
-    lines = _strip_labeled_metadata_lines(lines)
-    return "\n".join(lines).strip()
+    return clean_generated_markdown(content)
 
 
-def _strip_wrapping_code_fence(lines: list[str]) -> list[str]:
-    """Remove a full Markdown code fence wrapper when Gemini adds one."""
-    if not lines:
-        return lines
-
-    first_line = lines[0].strip().lower()
-    if first_line.startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip() == "```":
-        lines = lines[:-1]
-    return lines
-
-
-def _strip_json_metadata_block(lines: list[str]) -> list[str]:
-    """Remove a leading JSON metadata code block."""
-    if not lines or not lines[0].strip().startswith("```json"):
-        return lines
-
-    for index, line in enumerate(lines[1:], start=1):
-        if line.strip().startswith("```"):
-            return lines[index + 1 :]
-    return lines
-
-
-def _strip_front_matter_block(lines: list[str]) -> list[str]:
-    """Remove a leading YAML-like metadata block."""
-    if not lines or lines[0].strip() != "---":
-        return lines
-
-    for index, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
-            return lines[index + 1 :]
-    return lines
-
-
-def _strip_labeled_metadata_lines(lines: list[str]) -> list[str]:
-    """Remove leading SEO label lines such as 'SEOタイトル: ...'."""
-    metadata_pattern = re.compile(
-        r"^(seo\s*title|seoタイトル|タイトル|meta\s*description|メタディスクリプション|slug|スラッグ)\s*[:：]",
-        flags=re.IGNORECASE,
-    )
-
-    index = 0
-    while index < len(lines):
-        stripped_line = lines[index].strip()
-        if not stripped_line or stripped_line == "---":
-            index += 1
-            continue
-        if metadata_pattern.match(stripped_line):
-            index += 1
-            continue
-        break
-    return lines[index:]
+def markdown_to_wordpress_html(content: str, article_type: str = "default") -> str:
+    """Convert generated Markdown content into WordPress-friendly HTML."""
+    return ArticleFormatService().format_article(article_type, content)
 
 
 def _fallback_title(article: GeneratedArticle) -> str:
