@@ -100,6 +100,16 @@ affiliate-system/
 - ログを出力する
 - 責務を分離する
 
+## 既存記事のWordPress更新
+
+Markdownを編集したあと、既存投稿だけを更新する場合は次を使います。
+
+```powershell
+python scripts\update_wordpress_posts.py 9
+```
+
+詳細は [docs/development/WordPress記事更新手順.md](docs/development/WordPress記事更新手順.md) を参照してください。
+
 ## 完成目標
 
 `main.py` を実行するだけで、テーマ入力、楽天取得、記事生成、Markdown保存、確認、WordPress投稿、X投稿まで実行できるシステムを完成させます。
