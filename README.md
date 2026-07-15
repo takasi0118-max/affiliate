@@ -100,6 +100,16 @@ affiliate-system/
 - ログを出力する
 - 責務を分離する
 
+## 新規テーマで記事を作成
+
+新しいテーマで3記事（悩み・商品紹介・ランキング）を生成する場合:
+
+```powershell
+python main.py
+```
+
+詳細は [docs/development/新規テーマ記事作成手順.md](docs/development/新規テーマ記事作成手順.md) を参照してください。
+
 ## 既存記事のWordPress更新
 
 Markdownを編集したあと、既存投稿だけを更新する場合は次を使います。
