@@ -9,6 +9,17 @@ from utils.file_io import ensure_directory, save_json_file
 
 
 @dataclass(frozen=True)
+class ArticleHistoryRecord:
+    """One generated article to store in history.json."""
+
+    article_type: str
+    title: str
+    slug: str
+    markdown_path: str
+    wordpress_post_id: int | None = None
+
+
+@dataclass(frozen=True)
 class HistoryEntry:
     """A generated article record stored in history.json."""
 
@@ -100,4 +111,29 @@ class SiteManager:
         """Append a history entry and save history.json."""
         # メモリ上の履歴に追加したあと、history.jsonにも保存して次回起動時に反映する。
         self._history.append(entry.to_dict())
+        save_json_file(self.site_config.site_dir / "history.json", self._history)
+
+    def record_theme_article_set(
+        self,
+        theme: str,
+        records: list[ArticleHistoryRecord],
+    ) -> None:
+        """Record one theme's generated article set in history.json."""
+        if theme in self.get_processed_themes():
+            return
+
+        for record in records:
+            post_id = record.wordpress_post_id
+            status = "draft" if post_id and post_id > 0 else "generated"
+            self._history.append(
+                HistoryEntry(
+                    theme=theme,
+                    article_type=record.article_type,
+                    title=record.title,
+                    slug=record.slug,
+                    markdown_path=record.markdown_path,
+                    status=status,
+                    wordpress_post_id=post_id if post_id and post_id > 0 else None,
+                ).to_dict()
+            )
         save_json_file(self.site_config.site_dir / "history.json", self._history)
