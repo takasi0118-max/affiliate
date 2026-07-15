@@ -163,6 +163,8 @@ def _add_common_classes(
     article_type: str,
 ) -> None:
     """Add common CSS classes to converted Markdown HTML."""
+    for heading in soup.find_all("h1"):
+        _append_class(heading, "affiliate-article-title")
     for heading in soup.find_all("h2"):
         _append_class(heading, "affiliate-section-heading")
     for heading in soup.find_all("h3"):
@@ -564,6 +566,7 @@ def _is_faq_question_heading(heading: Tag) -> bool:
     return bool(re.match(r"^Q\d*[\.\s:：]", text, flags=re.IGNORECASE))
 
 
+H1_INLINE_STYLE = "margin:0 0 1.6em;padding:0;"
 H2_INLINE_STYLE = (
     "color:#ffffff;background:#111827;border:none;border-left:none;"
     "border-radius:0;font-weight:800;padding:18px;margin:38px 0 18px;"
@@ -588,6 +591,8 @@ def _style_product_button(link: Tag) -> None:
 
 def _apply_inline_visual_styles(soup: BeautifulSoup) -> None:
     """Apply inline styles that survive WordPress content sanitization."""
+    for heading in soup.find_all("h1", class_="affiliate-article-title"):
+        heading["style"] = H1_INLINE_STYLE
     for heading in soup.find_all("h2", class_="affiliate-section-heading"):
         heading["style"] = H2_INLINE_STYLE
     for heading in soup.find_all("h3", class_="affiliate-subheading"):
@@ -628,6 +633,10 @@ def _article_style_block() -> str:
   background: transparent;
   padding: 4px 2px;
   border-radius: 14px;
+}
+.affiliate-article__body h1.affiliate-article-title {
+  margin: 0 0 1.6em;
+  padding: 0;
 }
 .affiliate-article__body p {
   margin: 0 0 1.35em;
