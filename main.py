@@ -176,6 +176,7 @@ def main() -> None:
                         problem_seo=problem_seo_analysis,
                         product_seo=product_seo_analysis,
                         ranking_seo=ranking_seo_analysis,
+                        products=products,
                     )
                 except (WordPressApiError, requests.RequestException) as error:
                     logger.error("WordPress draft posting failed: %s", error)
