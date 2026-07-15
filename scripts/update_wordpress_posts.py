@@ -5,6 +5,9 @@ Usage:
     python scripts/update_wordpress_posts.py 9
     python scripts/update_wordpress_posts.py 8 10
     python scripts/update_wordpress_posts.py --list
+
+Post targets are loaded from sites/{SITE_KEY}/history.json.
+Legacy post IDs 8, 9, and 10 remain available until history.json contains them.
 """
 
 from __future__ import annotations
@@ -13,7 +16,6 @@ import argparse
 import re
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -23,10 +25,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from config.settings import load_settings
 from providers.rakuten_provider import RakutenProduct
 from providers.wordpress_provider import WordPressProvider
+from services.post_target_registry import PostTarget, load_post_targets
 from services.seo_service import SeoService
 from services.wordpress_post_service import WordPressPostService
-
-PRODUCT_MD = Path("sites/disaster/output/product-bousai-rucksack-select.md")
 
 PRODUCT_BLOCK_PATTERN = re.compile(
     r"\[!\[(?P<name>[^\]]+)\]\((?P<img>[^)]+)\)\]\((?P<url>[^)]+)\)\s*\n\s*\n"
@@ -34,36 +35,6 @@ PRODUCT_BLOCK_PATTERN = re.compile(
     r"\*\s+\*\*レビュー評価\*\*:\s*(?P<review>[0-9.]+)[^\n]*件数:\s*(?P<count>[0-9,]+)件",
     re.S,
 )
-
-
-@dataclass(frozen=True)
-class PostTarget:
-    """One WordPress post and its source Markdown file."""
-
-    post_id: int
-    article_type: str
-    markdown_path: Path
-    needs_products: bool = False
-
-
-POST_TARGETS: dict[int, PostTarget] = {
-    8: PostTarget(
-        8,
-        "problem",
-        Path("sites/disaster/output/problem-emergency-backpack-how-to-choose.md"),
-        needs_products=True,
-    ),
-    9: PostTarget(
-        9,
-        "product",
-        Path("sites/disaster/output/product-bousai-rucksack-select.md"),
-    ),
-    10: PostTarget(
-        10,
-        "ranking",
-        Path("sites/disaster/output/ranking-bousai-backpack-ranking.md"),
-    ),
-}
 
 
 def parse_products_from_markdown(path: Path) -> list[RakutenProduct]:
@@ -105,27 +76,39 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def resolve_targets(post_ids: Sequence[int]) -> list[PostTarget]:
+def resolve_targets(
+    post_ids: Sequence[int],
+    post_targets: dict[int, PostTarget],
+) -> list[PostTarget]:
     """Return the post targets selected on the command line."""
     if not post_ids:
-        return [POST_TARGETS[post_id] for post_id in sorted(POST_TARGETS)]
+        return [post_targets[post_id] for post_id in sorted(post_targets)]
 
-    unknown_ids = [post_id for post_id in post_ids if post_id not in POST_TARGETS]
+    unknown_ids = [post_id for post_id in post_ids if post_id not in post_targets]
     if unknown_ids:
-        known = ", ".join(str(post_id) for post_id in sorted(POST_TARGETS))
+        known = ", ".join(str(post_id) for post_id in sorted(post_targets))
         unknown = ", ".join(str(post_id) for post_id in unknown_ids)
         raise SystemExit(f"Unknown post ID(s): {unknown}. Registered IDs: {known}")
 
-    return [POST_TARGETS[post_id] for post_id in post_ids]
+    return [post_targets[post_id] for post_id in post_ids]
 
 
-def print_registered_posts() -> None:
+def print_registered_posts(post_targets: dict[int, PostTarget]) -> None:
     """Print the registered post mapping."""
-    for post_id in sorted(POST_TARGETS):
-        target = POST_TARGETS[post_id]
+    for post_id in sorted(post_targets):
+        target = post_targets[post_id]
+        theme_label = f" [{target.theme}]" if target.theme else ""
         print(
-            f"{post_id}: {target.article_type} -> {target.markdown_path.as_posix()}"
+            f"{post_id}: {target.article_type}{theme_label} -> "
+            f"{target.markdown_path.as_posix()}"
         )
+
+
+def _resolve_product_source(target: PostTarget) -> Path | None:
+    """Return the product Markdown used to build problem-article product cards."""
+    if target.product_markdown_path is not None:
+        return PROJECT_ROOT / target.product_markdown_path
+    return None
 
 
 def update_posts(targets: Sequence[PostTarget]) -> None:
@@ -138,11 +121,7 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
     )
     service = WordPressPostService(provider)
     seo_service = SeoService()
-
-    products: list[RakutenProduct] | None = None
-    if any(target.needs_products for target in targets):
-        products = parse_products_from_markdown(PRODUCT_MD)
-        print(f"Parsed {len(products)} products for problem article")
+    product_cache: dict[Path, list[RakutenProduct]] = {}
 
     provider.test_connection()
     print("WordPress connection: OK")
@@ -152,9 +131,27 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
         if not markdown_path.exists():
             raise SystemExit(f"Markdown file not found: {markdown_path}")
 
+        article_products: list[RakutenProduct] | None = None
+        if target.needs_products:
+            product_source = _resolve_product_source(target)
+            if product_source is None:
+                raise SystemExit(
+                    f"Product markdown not found for problem post {target.post_id}."
+                )
+            if not product_source.exists():
+                raise SystemExit(f"Product markdown file not found: {product_source}")
+            if product_source not in product_cache:
+                product_cache[product_source] = parse_products_from_markdown(
+                    product_source
+                )
+                print(
+                    f"Parsed {len(product_cache[product_source])} products from "
+                    f"{product_source.relative_to(PROJECT_ROOT).as_posix()}"
+                )
+            article_products = product_cache[product_source]
+
         markdown_content = markdown_path.read_text(encoding="utf-8")
         seo = seo_service.analyze_article(markdown_content)
-        article_products = products if target.needs_products else None
         updated_id = service.update_post_with_markdown(
             post_id=target.post_id,
             markdown_content=markdown_content,
@@ -173,12 +170,13 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the CLI."""
     args = build_parser().parse_args(argv)
+    post_targets = load_post_targets()
 
     if args.list:
-        print_registered_posts()
+        print_registered_posts(post_targets)
         return
 
-    targets = resolve_targets(args.post_ids)
+    targets = resolve_targets(args.post_ids, post_targets)
     update_posts(targets)
 
 

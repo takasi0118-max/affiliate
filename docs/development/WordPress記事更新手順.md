@@ -10,6 +10,8 @@ Cursorがなくても、コマンドだけで実行できます。
 | `main.py` | 新しいテーマで記事を**新規生成**し、下書きとして投稿する |
 | `scripts/update_wordpress_posts.py` | Markdownを編集したあと、**既存投稿を上書き更新**する |
 
+関連ドキュメント: [新規テーマ記事作成手順.md](新規テーマ記事作成手順.md)
+
 `main.py` は Gemini API と楽天 API を使いますが、この更新スクリプトは **WordPress API だけ** を使います。
 
 ## 前提
@@ -19,6 +21,11 @@ Cursorがなくても、コマンドだけで実行できます。
 - 更新対象の Markdown は `sites/disaster/output/` にある
 
 ## 登録済みの投稿
+
+投稿IDとMarkdownの対応は `sites/disaster/history.json` から自動で読み込みます。
+`main.py` で新規テーマを作成すると、WordPress投稿ID付きで履歴に追記されます。
+
+現在の手動管理対象（履歴未登録時のフォールバック）:
 
 | 投稿ID | 記事タイプ | Markdownファイル |
 |--------|-----------|------------------|
@@ -88,20 +95,11 @@ update-wordpress.bat
 
 ## 新しい投稿を追加するとき
 
-`scripts/update_wordpress_posts.py` の `POST_TARGETS` に行を追加します。
+通常は `main.py` で新規テーマを作成すれば、`history.json` に自動登録されます。
+手動で追記する必要はありません。
 
-```python
-POST_TARGETS: dict[int, PostTarget] = {
-    8: PostTarget(...),
-    9: PostTarget(...),
-    10: PostTarget(...),
-    15: PostTarget(
-        15,
-        "product",
-        Path("sites/disaster/output/新しいファイル.md"),
-    ),
-}
-```
+`wordpress_post_id` が空の履歴レコードは、更新コマンドの対象外です。
+WordPress下書き作成に失敗した場合は、`history.json` の `wordpress_post_id` を手動で補完してください。
 
 記事タイプは次のいずれかです。
 
@@ -119,7 +117,7 @@ POST_TARGETS: dict[int, PostTarget] = {
 
 ### `Markdown file not found`
 
-`POST_TARGETS` のファイルパスが間違っているか、Markdown が存在しません。
+`history.json` の `markdown_path` が間違っているか、Markdown が存在しません。
 
 ### WordPress 接続エラー
 
