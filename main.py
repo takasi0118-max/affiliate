@@ -16,7 +16,7 @@ from services.markdown_service import MarkdownService
 from services.product_service import ProductService
 from services.prompt_manager import PromptManager
 from services.seo_service import SeoService
-from services.site_manager import SiteManager
+from services.site_manager import ArticleHistoryRecord, SiteManager
 from services.wordpress_post_service import WordPressPostService
 from utils.logger import setup_logging
 
@@ -182,6 +182,47 @@ def main() -> None:
                     logger.error("WordPress draft posting failed: %s", error)
                     wordpress_post_result = None
                     wordpress_error = str(error)
+
+            if markdown_result is not None and markdown_result.is_ready:
+                site_manager.record_theme_article_set(
+                    theme=next_theme,
+                    records=[
+                        ArticleHistoryRecord(
+                            article_type="problem",
+                            title=problem_seo_analysis.seo_title,
+                            slug=problem_seo_analysis.slug,
+                            markdown_path=str(markdown_result.problem.path),
+                            wordpress_post_id=(
+                                wordpress_post_result.problem.post_id
+                                if wordpress_post_result
+                                else None
+                            ),
+                        ),
+                        ArticleHistoryRecord(
+                            article_type="product",
+                            title=product_seo_analysis.seo_title,
+                            slug=product_seo_analysis.slug,
+                            markdown_path=str(markdown_result.product.path),
+                            wordpress_post_id=(
+                                wordpress_post_result.product.post_id
+                                if wordpress_post_result
+                                else None
+                            ),
+                        ),
+                        ArticleHistoryRecord(
+                            article_type="ranking",
+                            title=ranking_seo_analysis.seo_title,
+                            slug=ranking_seo_analysis.slug,
+                            markdown_path=str(markdown_result.ranking.path),
+                            wordpress_post_id=(
+                                wordpress_post_result.ranking.post_id
+                                if wordpress_post_result
+                                else None
+                            ),
+                        ),
+                    ],
+                )
+                logger.info("History saved for theme: %s", next_theme)
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
@@ -221,6 +262,8 @@ def main() -> None:
     print(f"Default category configured: {bool(site_manager.get_default_category())}")
     print(f"Default tags: {len(site_manager.get_default_tags())}")
     print(f"History records: {len(site_manager.history)}")
+    if next_theme is not None and markdown_result is not None and markdown_result.is_ready:
+        print(f"History saved for theme: {next_theme}")
     print(f"Prompt templates: {len(available_prompts)}")
     print(f"Problem article generated: {bool(problem_article and problem_article.is_generated)}")
     if problem_article is not None:
