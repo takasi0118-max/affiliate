@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "theme": "防災リュック",
+    "article_type": "problem",
+    "title": "防災リュックは何が必要？初心者が陥る失敗と失敗しない選び方",
+    "slug": "emergency-backpack-how-to-choose",
+    "markdown_path": "sites\\disaster\\output\\problem-emergency-backpack-how-to-choose.md",
+    "status": "draft",
+    "wordpress_post_id": 8,
+    "created_at": "2026-07-15T07:55:14.665931+00:00"
+  },
+  {
+    "theme": "防災リュック",
+    "article_type": "product",
+    "title": "【初心者向け】防災リュックおすすめ5選！選び方と必要な中身を解説",
+    "slug": "bousai-rucksack-select",
+    "markdown_path": "sites\\disaster\\output\\product-bousai-rucksack-select.md",
+    "status": "draft",
+    "wordpress_post_id": 9,
+    "created_at": "2026-07-15T07:55:14.667329+00:00"
+  },
+  {
+    "theme": "防災リュック",
+    "article_type": "ranking",
+    "title": "【2026年】防災リュックおすすめ比較ランキング5選！防災士が選ぶ選び方",
+    "slug": "bousai-backpack-ranking",
+    "markdown_path": "sites\\disaster\\output\\ranking-bousai-backpack-ranking.md",
+    "status": "draft",
+    "wordpress_post_id": 10,
+    "created_at": "2026-07-15T07:55:14.679017+00:00"
+  }
+]
