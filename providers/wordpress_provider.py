@@ -98,6 +98,83 @@ class WordPressProvider:
             raise WordPressApiError("WordPress response did not contain post data.")
         return data
 
+    def create_draft_page(
+        self,
+        title: str,
+        content: str,
+        slug: str = "",
+        excerpt: str = "",
+    ) -> int:
+        """Create a WordPress draft page and return its page ID."""
+        # 固定ページは記事一覧には混ざらず、案内ページなどに使いやすい。
+        payload: dict[str, Any] = {
+            "title": title,
+            "content": content,
+            "status": "draft",
+        }
+        if slug:
+            payload["slug"] = slug
+        if excerpt:
+            payload["excerpt"] = excerpt
+
+        response = self._request("POST", "/wp-json/wp/v2/pages", json=payload)
+        data = response.json()
+        page_id = data.get("id")
+        if not isinstance(page_id, int):
+            raise WordPressApiError("WordPress response did not contain a page ID.")
+        return page_id
+
+    def get_page(self, page_id: int) -> dict[str, Any]:
+        """Return one WordPress page response as a dictionary."""
+        response = self._request("GET", f"/wp-json/wp/v2/pages/{page_id}")
+        data = response.json()
+        if not isinstance(data, dict):
+            raise WordPressApiError("WordPress response did not contain page data.")
+        return data
+
+    def update_page(
+        self,
+        page_id: int,
+        content: str,
+        title: str = "",
+        slug: str = "",
+        excerpt: str = "",
+    ) -> int:
+        """Update an existing WordPress page and return its page ID."""
+        # 固定ページの下書き内容を差し替える時に使う。statusは変えない。
+        payload: dict[str, Any] = {
+            "content": content,
+        }
+        if title:
+            payload["title"] = title
+        if slug:
+            payload["slug"] = slug
+        if excerpt:
+            payload["excerpt"] = excerpt
+
+        response = self._request(
+            "POST",
+            f"/wp-json/wp/v2/pages/{page_id}",
+            json=payload,
+        )
+        data = response.json()
+        updated_page_id = data.get("id")
+        if not isinstance(updated_page_id, int):
+            raise WordPressApiError("WordPress response did not contain a page ID.")
+        return updated_page_id
+
+    def find_pages_by_slug(self, slug: str) -> list[dict[str, Any]]:
+        """Return WordPress pages that match a slug."""
+        # 同じ固定ページを何度も作らないよう、作成前にslugで既存ページを確認する。
+        response = self._request(
+            "GET",
+            f"/wp-json/wp/v2/pages?slug={slug}&status=any",
+        )
+        data = response.json()
+        if not isinstance(data, list):
+            raise WordPressApiError("WordPress response did not contain page data.")
+        return [item for item in data if isinstance(item, dict)]
+
     def _request(
         self,
         method: str,

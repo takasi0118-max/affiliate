@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from providers.rakuten_provider import RakutenProduct
 from providers.wordpress_provider import WordPressProvider
 from services.article_generator import GeneratedArticle
 from services.article_format_service import ArticleFormatService, clean_generated_markdown
@@ -60,18 +61,20 @@ class WordPressPostService:
         problem_seo: SeoAnalysis,
         product_seo: SeoAnalysis,
         ranking_seo: SeoAnalysis,
+        products: list[RakutenProduct] | None = None,
     ) -> WordPressPostResult:
         """Create draft posts for problem, product, and ranking articles."""
         # STEP16では公開ではなく下書き作成までにし、管理画面で確認できる状態にする。
-        problem = self.create_draft_post(articles.problem_article, problem_seo)
-        product = self.create_draft_post(articles.product_article, product_seo)
-        ranking = self.create_draft_post(articles.ranking_article, ranking_seo)
+        problem = self.create_draft_post(articles.problem_article, problem_seo, products)
+        product = self.create_draft_post(articles.product_article, product_seo, products)
+        ranking = self.create_draft_post(articles.ranking_article, ranking_seo, products)
         return WordPressPostResult(problem=problem, product=product, ranking=ranking)
 
     def create_draft_post(
         self,
         article: GeneratedArticle,
         seo: SeoAnalysis,
+        products: list[RakutenProduct] | None = None,
     ) -> PostedArticle:
         """Create one WordPress draft post."""
         # SEOタイトルが読めない場合でも、テーマと記事種別から下書きタイトルを作る。
@@ -79,6 +82,7 @@ class WordPressPostService:
         content = self.article_format_service.format_article(
             article_type=article.article_type,
             markdown_content=article.content,
+            products=products,
         )
         post_id = self.wordpress_provider.create_draft_post(
             title=title,
@@ -94,12 +98,14 @@ class WordPressPostService:
         markdown_content: str,
         seo: SeoAnalysis,
         article_type: str = "default",
+        products: list[RakutenProduct] | None = None,
     ) -> int:
         """Update an existing WordPress post with HTML converted from Markdown."""
         # 既存のMarkdownをHTML化し、作成済み下書きの本文だけを差し替える。
         html_content = self.article_format_service.format_article(
             article_type=article_type,
             markdown_content=markdown_content,
+            products=products,
         )
         return self.wordpress_provider.update_post(
             post_id=post_id,
@@ -115,9 +121,13 @@ def _clean_post_content(content: str) -> str:
     return clean_generated_markdown(content)
 
 
-def markdown_to_wordpress_html(content: str, article_type: str = "default") -> str:
+def markdown_to_wordpress_html(
+    content: str,
+    article_type: str = "default",
+    products: list[RakutenProduct] | None = None,
+) -> str:
     """Convert generated Markdown content into WordPress-friendly HTML."""
-    return ArticleFormatService().format_article(article_type, content)
+    return ArticleFormatService().format_article(article_type, content, products)
 
 
 def _fallback_title(article: GeneratedArticle) -> str:
