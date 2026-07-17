@@ -13,7 +13,6 @@ Legacy post IDs 8, 9, and 10 remain available until history.json contains them.
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -31,35 +30,21 @@ from services.post_target_registry import (
     load_post_targets,
 )
 from services.article_link_sanitizer import sanitize_article_references
+from services.markdown_product_block_service import (
+    has_product_blocks,
+    parse_products_from_markdown,
+)
+from services.inline_related_link_service import (
+    InlineRelatedLinkService,
+    load_theme_article_links,
+)
 from services.seo_service import SeoService
 from services.wordpress_post_service import WordPressPostService
 
-PRODUCT_BLOCK_PATTERN = re.compile(
-    r"\[!\[(?P<name>[^\]]+)\]\((?P<img>[^)]+)\)\]\((?P<url>[^)]+)\)\s*\n\s*\n"
-    r"\*\s+\*\*価格\*\*:\s*(?P<price>[^\n]+)\n"
-    r"\*\s+\*\*レビュー評価\*\*:\s*(?P<review>[0-9.]+)[^\n]*件数:\s*(?P<count>[0-9,]+)件",
-    re.S,
-)
-
-
-def parse_products_from_markdown(path: Path) -> list[RakutenProduct]:
-    """Read Rakuten product metadata blocks from a product article Markdown file."""
-    product_md = path.read_text(encoding="utf-8")
-    products: list[RakutenProduct] = []
-    for match in PRODUCT_BLOCK_PATTERN.finditer(product_md):
-        price_digits = re.sub(r"\D", "", match.group("price"))
-        count_digits = re.sub(r"\D", "", match.group("count"))
-        products.append(
-            RakutenProduct(
-                name=match.group("name"),
-                price=int(price_digits) if price_digits else 0,
-                url=match.group("url"),
-                image_url=match.group("img"),
-                review_average=float(match.group("review")),
-                review_count=int(count_digits) if count_digits else 0,
-            )
-        )
-    return products
+MIN_PRODUCT_BLOCKS_BY_TYPE = {
+    "product": 10,
+    "ranking": 5,
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -116,6 +101,38 @@ def _resolve_product_source(target: PostTarget) -> Path | None:
     return None
 
 
+def _validate_product_blocks(target: PostTarget, markdown_content: str) -> None:
+    """Abort when product or ranking articles would lose affiliate blocks."""
+    minimum = MIN_PRODUCT_BLOCKS_BY_TYPE.get(target.article_type)
+    if minimum is None:
+        return
+    if has_product_blocks(markdown_content, minimum=minimum):
+        return
+    raise SystemExit(
+        f"Post {target.post_id} ({target.article_type}) has no Rakuten product "
+        f"image links in {target.markdown_path.as_posix()}. "
+        "Restore affiliate blocks before updating."
+    )
+
+
+def _validate_problem_products(target: PostTarget, products: list[RakutenProduct]) -> None:
+    """Abort when a problem article cannot rebuild product mini cards."""
+    if not target.needs_products:
+        return
+    if products:
+        return
+    product_source = _resolve_product_source(target)
+    source_label = (
+        product_source.relative_to(PROJECT_ROOT).as_posix()
+        if product_source is not None
+        else "product markdown"
+    )
+    raise SystemExit(
+        f"Post {target.post_id} (problem) needs product data from {source_label}, "
+        "but no Rakuten product blocks were found. Restore affiliate blocks first."
+    )
+
+
 def update_posts(targets: Sequence[PostTarget]) -> None:
     """Update the selected WordPress posts."""
     settings = load_settings()
@@ -128,6 +145,8 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
     seo_service = SeoService()
     product_cache: dict[Path, list[RakutenProduct]] = {}
     allowed_slugs_by_theme = load_allowed_slugs_by_theme()
+    theme_article_links = load_theme_article_links()
+    inline_link_service = InlineRelatedLinkService()
 
     provider.test_connection()
     print("WordPress connection: OK")
@@ -148,13 +167,14 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
                 raise SystemExit(f"Product markdown file not found: {product_source}")
             if product_source not in product_cache:
                 product_cache[product_source] = parse_products_from_markdown(
-                    product_source
+                    product_source.read_text(encoding="utf-8")
                 )
                 print(
                     f"Parsed {len(product_cache[product_source])} products from "
                     f"{product_source.relative_to(PROJECT_ROOT).as_posix()}"
                 )
             article_products = product_cache[product_source]
+            _validate_problem_products(target, article_products)
 
         markdown_content = markdown_path.read_text(encoding="utf-8")
         allowed_slugs = allowed_slugs_by_theme.get(target.theme, set())
@@ -163,6 +183,14 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
                 markdown_content,
                 allowed_slugs,
             )
+        if target.theme:
+            markdown_content = inline_link_service.apply(
+                markdown_content,
+                target.article_type,
+                target.theme,
+                theme_article_links,
+            )
+        _validate_product_blocks(target, markdown_content)
         seo = seo_service.analyze_article(markdown_content)
         updated_id = service.update_post_with_markdown(
             post_id=target.post_id,

@@ -3,10 +3,15 @@
 from dataclasses import dataclass
 import re
 
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 import markdown
 
 from providers.rakuten_provider import RakutenProduct
+from services.markdown_product_block_service import normalize_affiliate_blocks_in_markdown
+from services.article_toc_service import (
+    convert_detail_subheadings,
+    normalize_list_entry_headings,
+)
 
 
 @dataclass(frozen=True)
@@ -53,7 +58,9 @@ class ArticleFormatService:
         """Return formatted HTML for one article type."""
         # Geminiの出力はMarkdownで残し、WordPressへ送る直前だけHTMLレイアウトへ変換する。
         article_format = _get_article_format(article_type)
-        cleaned_content = clean_generated_markdown(markdown_content)
+        cleaned_content = clean_generated_markdown(
+            normalize_affiliate_blocks_in_markdown(markdown_content)
+        )
         body_html = _markdown_to_html(cleaned_content)
         product_affiliates = _build_product_affiliates(products or [])
         return _apply_article_layout(body_html, article_format, product_affiliates)
@@ -175,11 +182,14 @@ def _add_common_classes(
     for link in soup.find_all("a"):
         _append_class(link, "affiliate-link")
     _assign_heading_ids(soup)
+    convert_detail_subheadings(soup)
+    normalize_list_entry_headings(soup)
     _normalize_affiliate_links(soup)
     _build_existing_product_cards(soup, article_type)
     _highlight_star_ratings(soup)
     _add_product_link_buttons(soup, products, article_type)
     _convert_faq_sections(soup)
+    _style_inline_related_boxes(soup)
     _apply_inline_visual_styles(soup)
 
 
@@ -528,6 +538,25 @@ def _highlight_star_ratings(soup: BeautifulSoup) -> None:
         text_node.replace_with(fragment)
 
 
+def _style_inline_related_boxes(soup: BeautifulSoup) -> None:
+    """Style contextual related-article callout boxes."""
+    for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+        comment.extract()
+    for text_node in list(soup.find_all(string=True)):
+        if not isinstance(text_node, NavigableString) or isinstance(text_node, Comment):
+            continue
+        if "affiliate-inline-related:" not in str(text_node):
+            continue
+        cleaned = ORPHAN_INLINE_MARKER_PATTERN.sub("", str(text_node))
+        if cleaned.strip():
+            text_node.replace_with(NavigableString(cleaned))
+        else:
+            text_node.extract()
+    for box in soup.find_all("div", class_="affiliate-inline-related"):
+        for link in box.find_all("a", href=True):
+            _append_class(link, "affiliate-link")
+
+
 def _convert_faq_sections(soup: BeautifulSoup) -> None:
     """Convert FAQ question headings into collapsible answer blocks."""
     for heading in list(soup.find_all(["h3", "h4"])):
@@ -575,15 +604,24 @@ H3_INLINE_STYLE = (
     "color:#111827;background:#eef1f5;border-left:4px solid #9aa7b5;"
     "border-radius:0;font-weight:800;padding:8px 12px;margin:28px 0 12px;"
 )
+DETAIL_HEADING_INLINE_STYLE = (
+    "border-top:1px solid #e2e8f0;margin:20px 0 10px;padding:16px 0 0;"
+)
+DETAIL_LABEL_INLINE_STYLE = "font-weight:800;"
 PRODUCT_BUTTON_INLINE_STYLE = (
-    "display:inline-block;background:#fde8e8;color:#8a1f1f;border:1px solid #f5b8b8;"
-    "border-radius:0;min-width:190px;padding:12px 28px;text-align:center;"
-    "text-decoration:none;font-weight:800;box-shadow:0 4px 12px rgba(138,31,31,0.12);"
+    "display:inline-block;background:#EA7373;color:#ffffff;border:none;"
+    "border-radius:0;min-width:190px;padding:6px 24px;text-align:center;"
+    "text-decoration:none;font-weight:800;box-shadow:none;"
+    "transition:transform 0.2s ease,box-shadow 0.2s ease,background 0.2s ease;"
+)
+ORPHAN_INLINE_MARKER_PATTERN = re.compile(
+    r"<!--\s*affiliate-inline-related:[^>]+-->\s*",
+    re.IGNORECASE,
 )
 
 
 def _style_product_button(link: Tag) -> None:
-    """Apply inline styles so Rakuten buttons keep their light-red appearance."""
+    """Apply inline styles so Rakuten buttons keep their appearance in WordPress."""
     classes = [class_name for class_name in link.get("class", []) if class_name != "affiliate-link"]
     link["class"] = classes
     link["style"] = PRODUCT_BUTTON_INLINE_STYLE
@@ -597,6 +635,11 @@ def _apply_inline_visual_styles(soup: BeautifulSoup) -> None:
         heading["style"] = H2_INLINE_STYLE
     for heading in soup.find_all("h3", class_="affiliate-subheading"):
         heading["style"] = H3_INLINE_STYLE
+    for heading in soup.find_all("p", class_="affiliate-detail-heading"):
+        heading["style"] = DETAIL_HEADING_INLINE_STYLE
+        strong = heading.find("strong")
+        if isinstance(strong, Tag):
+            strong["style"] = DETAIL_LABEL_INLINE_STYLE
     for link in soup.find_all("a", class_="affiliate-product-button"):
         _style_product_button(link)
 
@@ -649,56 +692,32 @@ def _article_style_block() -> str:
 .affiliate-article__body li {
   margin-bottom: 0.75em;
 }
-.affiliate-toc,
 .toc,
 .toc-content {
   transition: none !important;
   animation: none !important;
 }
-.affiliate-toc {
+.affiliate-inline-related {
   background: var(--blue-muted);
   border: 1px solid var(--blue-border);
-  border-radius: 14px;
-  margin: 0 0 26px;
+  border-left: 4px solid var(--main-blue);
+  border-radius: 12px;
+  display: block;
+  line-height: 1.8;
+  margin: 28px 0;
   padding: 14px 18px;
 }
-.affiliate-toc__summary {
+.affiliate-inline-related__label {
   color: var(--main-blue-dark);
-  cursor: pointer;
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   font-weight: 800;
-  list-style: none;
+  margin-right: 0.35em;
 }
-.affiliate-toc__summary::-webkit-details-marker {
-  display: none;
-}
-.affiliate-toc__summary::before {
-  content: "▸";
-  display: inline-block;
-  margin-right: 8px;
-}
-.affiliate-toc[open] .affiliate-toc__summary::before {
-  content: "▾";
-}
-.affiliate-toc__list {
-  margin: 12px 0 0;
-  padding-left: 1.25em;
-}
-.affiliate-toc__item {
-  margin: 0.32em 0;
-}
-.affiliate-toc__item--sub {
-  margin-left: 1em;
-  font-size: 0.94rem;
-}
-.affiliate-toc a {
+.affiliate-inline-related a.affiliate-link {
   color: var(--blue-link) !important;
-  text-decoration: none;
-  font-weight: 700;
-}
-.affiliate-toc a:hover {
-  color: var(--main-blue-dark) !important;
+  font-weight: 800;
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .affiliate-article__body > h2.affiliate-section-heading,
 .affiliate-article h2.affiliate-section-heading,
@@ -730,6 +749,21 @@ def _article_style_block() -> str:
   margin: 28px 0 12px;
   padding: 8px 12px;
   scroll-margin-top: 90px;
+}
+.affiliate-list-entry-heading[data-ordinal]::before {
+  content: attr(data-ordinal) ". ";
+  font-weight: 800;
+}
+.affiliate-detail-heading {
+  border-top: 1px solid #e2e8f0;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 20px 0 10px;
+  padding: 16px 0 0;
+}
+.affiliate-detail-heading strong {
+  font-weight: 800;
 }
 .affiliate-product-cta {
   margin: 14px 0 8px !important;
@@ -766,20 +800,23 @@ def _article_style_block() -> str:
 }
 .affiliate-product-button {
   display: inline-block;
-  background: #fde8e8;
-  color: #8a1f1f !important;
-  border: 1px solid #f5b8b8;
+  background: #EA7373;
+  color: #ffffff !important;
+  border: none;
   border-radius: 0;
   min-width: 190px;
-  padding: 12px 28px;
+  padding: 6px 24px;
   text-align: center;
   text-decoration: none !important;
   font-weight: 800;
-  box-shadow: 0 4px 12px rgba(138, 31, 31, 0.12);
+  box-shadow: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 .affiliate-product-button:hover {
-  background: #fbd1d1;
-  color: #6f1515 !important;
+  background: #d86565;
+  color: #ffffff !important;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(234, 115, 115, 0.35);
 }
 .affiliate-product-link-item {
   list-style: none;

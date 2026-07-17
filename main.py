@@ -10,6 +10,10 @@ from google.genai import errors
 from providers.gemini_provider import GeminiApiError, GeminiProvider
 from providers.rakuten_provider import RakutenApiError, RakutenProvider
 from providers.wordpress_provider import WordPressApiError, WordPressProvider
+from services.article_consistency_service import (
+    ArticleConsistencyError,
+    ArticleConsistencyService,
+)
 from services.article_generator import ArticleGenerator
 from services.internal_link_service import InternalLinkService
 from services.markdown_service import MarkdownService
@@ -68,6 +72,11 @@ def main() -> None:
     seo_service = SeoService()
     # InternalLinkServiceは、3記事のslugを使って関連記事リンクを追加する担当。
     internal_link_service = InternalLinkService()
+    # ArticleConsistencyServiceは、3記事間の矛盾がないかGeminiで確認する担当。
+    article_consistency_service = ArticleConsistencyService(
+        prompt_manager=prompt_manager,
+        gemini_provider=gemini_provider,
+    )
     # MarkdownServiceは、生成済み記事を人が確認できる.mdファイルとして保存する担当。
     markdown_service = MarkdownService()
     # WordPressProviderはWordPress REST APIとの通信だけを担当する。
@@ -83,6 +92,8 @@ def main() -> None:
     # 未処理テーマがある場合だけ、商品取得から記事生成までの確認処理を行う。
     wordpress_error = ""
     wordpress_post_result = None
+    consistency_result = None
+    consistency_error = ""
     try:
         wordpress_provider.test_connection()
     except (WordPressApiError, requests.RequestException) as error:
@@ -99,7 +110,7 @@ def main() -> None:
             # 記事テーマに関連する楽天商品を取得し、商品紹介の材料にする。
             product_result = product_service.search_for_article(
                 keyword=next_theme,
-                hits=5,
+                hits=10,
             )
             products = product_result.products
         except RakutenApiError as error:
@@ -144,6 +155,15 @@ def main() -> None:
             )
             # 比較記事もSEO要素を満たしているか確認する。
             ranking_seo_analysis = seo_service.analyze_article(ranking_article.content)
+
+            # 3記事間の矛盾がないか、保存前にGeminiで必ず確認する。
+            consistency_result = article_consistency_service.require_consistent_article_set(
+                theme=next_theme,
+                problem_article=problem_article,
+                product_article=product_article,
+                ranking_article=ranking_article,
+                products=product_prompt_text,
+            )
 
             # STEP14では、3記事が互いに行き来できるよう関連記事リンクを追加する。
             linked_articles = internal_link_service.apply_links(
@@ -223,6 +243,20 @@ def main() -> None:
                     ],
                 )
                 logger.info("History saved for theme: %s", next_theme)
+        except ArticleConsistencyError as error:
+            logger.error("Article consistency check failed: %s", error)
+            consistency_result = error.result
+            consistency_error = str(error)
+            problem_article = None
+            product_article = None
+            ranking_article = None
+            linked_articles = None
+            markdown_result = None
+            wordpress_post_result = None
+            gemini_error = consistency_error
+            problem_seo_analysis = None
+            product_seo_analysis = None
+            ranking_seo_analysis = None
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
@@ -251,6 +285,8 @@ def main() -> None:
         problem_seo_analysis = None
         product_seo_analysis = None
         ranking_seo_analysis = None
+        consistency_result = None
+        consistency_error = ""
 
     # 実行結果をターミナルへ出し、どこまで接続できたかを確認しやすくする。
     logger.info("Configuration loaded for site: %s", site_config.site_key)
@@ -313,6 +349,18 @@ def main() -> None:
         print(f"Ranking H3 headings: {ranking_seo_analysis.h3_count}")
         print(f"Ranking FAQ items: {ranking_seo_analysis.faq_count}")
         print(f"Ranking summary section detected: {ranking_seo_analysis.has_summary}")
+    print(
+        "Article consistency passed: "
+        f"{bool(consistency_result and consistency_result.is_consistent)}"
+    )
+    if consistency_result is not None:
+        print(f"Article consistency summary: {consistency_result.summary}")
+        print(f"Article consistency issues: {len(consistency_result.issues)}")
+        for issue in consistency_result.issues:
+            articles = ", ".join(issue.affected_articles) or "n/a"
+            print(f"  - [{issue.severity}] {issue.category} ({articles}): {issue.description}")
+    if consistency_error:
+        print(f"Article consistency error: {consistency_error}")
     print(f"Internal links ready: {bool(linked_articles and linked_articles.is_ready)}")
     if linked_articles is not None:
         print(f"Internal links: {linked_articles.link_count}")

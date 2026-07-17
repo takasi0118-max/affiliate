@@ -85,6 +85,9 @@ def _should_drop_line(line: str, allowed_slugs: set[str]) -> bool:
     if not line:
         return False
 
+    if "hb.afl.rakuten.co.jp" in line or "thumbnail.image.rakuten.co.jp" in line:
+        return False
+
     if stripped == "```":
         return True
 
