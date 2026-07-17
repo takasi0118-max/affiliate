@@ -31,7 +31,13 @@ class GeminiProvider:
         exceptions=(errors.APIError,),
         logger=logger,
     )
-    def generate_text(self, prompt: str) -> str:
+    def generate_text(
+        self,
+        prompt: str,
+        *,
+        temperature: float = 0.7,
+        system_instruction: str = "You are a Japanese SEO affiliate article writer.",
+    ) -> str:
         """Generate Markdown article text from a prompt."""
         # PromptManagerで組み立てた記事指示をGeminiへ送り、Markdown本文を生成する。
         # contentsがユーザーからの指示文、configが生成方法の設定。
@@ -39,10 +45,8 @@ class GeminiProvider:
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                # system_instructionは、Geminiに「どんな役割で答えるか」を伝える固定指示。
-                system_instruction="You are a Japanese SEO affiliate article writer.",
-                # temperatureは文章のゆらぎ。0に近いほど無難、1に近いほど表現が広がる。
-                temperature=0.7,
+                system_instruction=system_instruction,
+                temperature=temperature,
             ),
         )
 

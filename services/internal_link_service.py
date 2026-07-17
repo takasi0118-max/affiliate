@@ -3,24 +3,10 @@
 from dataclasses import dataclass, replace
 
 from services.article_generator import GeneratedArticle
+from services.article_link_models import ArticleLink
 from services.article_link_sanitizer import sanitize_article_references
+from services.inline_related_link_service import InlineRelatedLinkService
 from services.seo_service import SeoAnalysis
-
-
-@dataclass(frozen=True)
-class ArticleLink:
-    """Internal link information for one generated article."""
-
-    # article_typeはproblem/product/rankingのどの記事へ向けたリンクかを表す。
-    article_type: str
-    # titleはリンクテキストとして表示する記事タイトル。
-    title: str
-    # urlはWordPress公開時に使う想定の内部URL。slugから作る。
-    url: str
-
-    def to_markdown(self) -> str:
-        """Return the link as a Markdown list item."""
-        return f"- [{self.title}]({self.url})"
 
 
 @dataclass(frozen=True)
@@ -42,6 +28,10 @@ class LinkedArticleSet:
 class InternalLinkService:
     """Append internal links between problem, product, and ranking articles."""
 
+    def __init__(self) -> None:
+        """Initialize related link helpers."""
+        self.inline_related_link_service = InlineRelatedLinkService()
+
     def apply_links(
         self,
         problem_article: GeneratedArticle,
@@ -59,17 +49,40 @@ class InternalLinkService:
             "ranking": _build_link(ranking_article, ranking_seo),
         }
 
-        linked_problem = _append_related_links(
-            article=problem_article,
-            links=[links["product"], links["ranking"]],
+        theme = problem_article.theme
+        theme_links = {
+            theme: {
+                "problem": links["problem"],
+                "product": links["product"],
+                "ranking": links["ranking"],
+            }
+        }
+        linked_problem = replace(
+            problem_article,
+            content=self.inline_related_link_service.apply(
+                problem_article.content,
+                "problem",
+                theme,
+                theme_links,
+            ),
         )
-        linked_product = _append_related_links(
-            article=product_article,
-            links=[links["problem"], links["ranking"]],
+        linked_product = replace(
+            product_article,
+            content=self.inline_related_link_service.apply(
+                product_article.content,
+                "product",
+                theme,
+                theme_links,
+            ),
         )
-        linked_ranking = _append_related_links(
-            article=ranking_article,
-            links=[links["problem"], links["product"]],
+        linked_ranking = replace(
+            ranking_article,
+            content=self.inline_related_link_service.apply(
+                ranking_article.content,
+                "ranking",
+                theme,
+                theme_links,
+            ),
         )
 
         allowed_slugs = {

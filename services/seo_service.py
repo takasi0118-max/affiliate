@@ -44,20 +44,30 @@ class SeoService:
         # Geminiの出力を人が確認しやすいよう、機械的に拾える項目だけを集計する。
         lines = article.splitlines()
         json_metadata = _extract_json_metadata(lines)
+        yaml_metadata = _extract_yaml_front_matter(lines)
         return SeoAnalysis(
-            seo_title=json_metadata.get("title", "")
-            or _extract_labeled_value(
-                lines,
-                ("SEOタイトル", "SEO タイトル", "seo title", "title", "タイトル"),
+            seo_title=(
+                yaml_metadata.get("seo_title", "")
+                or json_metadata.get("title", "")
+                or _extract_labeled_value(
+                    lines,
+                    ("SEOタイトル", "SEO タイトル", "seo title", "seo_title", "title", "タイトル"),
+                )
             ),
-            meta_description=json_metadata.get("description", "")
-            or json_metadata.get("meta_description", "")
-            or _extract_labeled_value(
-                lines,
-                ("meta description", "メタディスクリプション"),
+            meta_description=(
+                yaml_metadata.get("meta_description", "")
+                or json_metadata.get("description", "")
+                or json_metadata.get("meta_description", "")
+                or _extract_labeled_value(
+                    lines,
+                    ("meta description", "meta_description", "メタディスクリプション"),
+                )
             ),
-            slug=json_metadata.get("slug", "")
-            or _extract_labeled_value(lines, ("slug", "スラッグ")),
+            slug=(
+                yaml_metadata.get("slug", "")
+                or json_metadata.get("slug", "")
+                or _extract_labeled_value(lines, ("slug", "スラッグ"))
+            ),
             h2_count=sum(1 for line in lines if line.startswith("## ")),
             h3_count=sum(1 for line in lines if line.startswith("### ")),
             faq_count=_count_faq_items(lines),
@@ -76,6 +86,24 @@ def _extract_labeled_value(lines: list[str], labels: tuple[str, ...]) -> str:
             if match:
                 return match.group(1).strip()
     return ""
+
+
+def _extract_yaml_front_matter(lines: list[str]) -> dict[str, str]:
+    """Extract key-value metadata from a leading YAML front matter block."""
+    if not lines or lines[0].strip() != "---":
+        return {}
+
+    metadata: dict[str, str] = {}
+    for line in lines[1:]:
+        stripped_line = line.strip()
+        if stripped_line == "---":
+            break
+        if not stripped_line or stripped_line.startswith("#"):
+            continue
+        match = re.match(r"^([A-Za-z0-9_]+)\s*:\s*(.+)$", stripped_line)
+        if match:
+            metadata[match.group(1).lower()] = match.group(2).strip()
+    return metadata
 
 
 def _extract_json_metadata(lines: list[str]) -> dict[str, str]:
