@@ -48,6 +48,19 @@ LEGACY_POST_TARGETS: dict[int, PostTarget] = {
 }
 
 
+def load_theme_slugs(history: list[dict]) -> dict[str, set[str]]:
+    """Return allowed article slugs grouped by theme."""
+    slugs_by_theme: dict[str, set[str]] = {}
+    for record in history:
+        if not isinstance(record, dict):
+            continue
+        theme = str(record.get("theme", ""))
+        slug = str(record.get("slug", "")).strip().strip("/")
+        if theme and slug:
+            slugs_by_theme.setdefault(theme, set()).add(slug)
+    return slugs_by_theme
+
+
 def load_post_targets() -> dict[int, PostTarget]:
     """Return post targets merged from history.json and legacy defaults."""
     settings = load_settings()
@@ -58,6 +71,25 @@ def load_post_targets() -> dict[int, PostTarget]:
     targets = dict(LEGACY_POST_TARGETS)
     targets.update(_build_targets_from_history(site_config.history))
     return targets
+
+
+def load_allowed_slugs_by_theme() -> dict[str, set[str]]:
+    """Return allowed article slugs grouped by theme from site history."""
+    settings = load_settings()
+    site_config = load_site_config(
+        site_key=settings.site_key,
+        output_dir=settings.output_dir,
+    )
+    slugs_by_theme = load_theme_slugs(site_config.history)
+    if not slugs_by_theme:
+        slugs_by_theme = {
+            "防災リュック": {
+                "emergency-backpack-how-to-choose",
+                "bousai-rucksack-select",
+                "bousai-backpack-ranking",
+            },
+        }
+    return slugs_by_theme
 
 
 def _build_targets_from_history(history: list[dict[str, Any]]) -> dict[int, PostTarget]:

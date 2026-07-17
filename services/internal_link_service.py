@@ -3,6 +3,7 @@
 from dataclasses import dataclass, replace
 
 from services.article_generator import GeneratedArticle
+from services.article_link_sanitizer import sanitize_article_references
 from services.seo_service import SeoAnalysis
 
 
@@ -71,6 +72,19 @@ class InternalLinkService:
             links=[links["problem"], links["product"]],
         )
 
+        allowed_slugs = {
+            slug
+            for slug in (
+                problem_seo.slug,
+                product_seo.slug,
+                ranking_seo.slug,
+            )
+            if slug
+        }
+        linked_problem = _sanitize_article(linked_problem, allowed_slugs)
+        linked_product = _sanitize_article(linked_product, allowed_slugs)
+        linked_ranking = _sanitize_article(linked_ranking, allowed_slugs)
+
         return LinkedArticleSet(
             problem_article=linked_problem,
             product_article=linked_product,
@@ -111,6 +125,15 @@ def _append_related_links(
         ]
     )
     return replace(article, content=f"{article.content.rstrip()}\n{related_section}")
+
+
+def _sanitize_article(
+    article: GeneratedArticle,
+    allowed_slugs: set[str],
+) -> GeneratedArticle:
+    """Remove references to articles outside the current article set."""
+    sanitized_content = sanitize_article_references(article.content, allowed_slugs)
+    return replace(article, content=sanitized_content)
 
 
 def _fallback_title(article_type: str, theme: str) -> str:

@@ -28,5 +28,35 @@
     "status": "draft",
     "wordpress_post_id": 10,
     "created_at": "2026-07-15T07:55:14.679017+00:00"
+  },
+  {
+    "theme": "非常食",
+    "article_type": "problem",
+    "title": "非常食は何日分が正解？よくある失敗と初心者が備えるべき目安を解説",
+    "slug": "emergency-food-how-many-days",
+    "markdown_path": "C:\\Users\\takas\\Documents\\affiliate\\sites\\disaster\\output\\problem-emergency-food-how-many-days.md",
+    "status": "draft",
+    "wordpress_post_id": 146,
+    "created_at": "2026-07-15T08:02:22.119634+00:00"
+  },
+  {
+    "theme": "非常食",
+    "article_type": "product",
+    "title": "非常食セットおすすめ5選！5年保存で家族を守る選び方と人気商品を解説",
+    "slug": "emergency-food-sets",
+    "markdown_path": "C:\\Users\\takas\\Documents\\affiliate\\sites\\disaster\\output\\product-emergency-food-sets.md",
+    "status": "draft",
+    "wordpress_post_id": 147,
+    "created_at": "2026-07-15T08:02:22.119698+00:00"
+  },
+  {
+    "theme": "非常食",
+    "article_type": "ranking",
+    "title": "【5年保存】非常食セットおすすめ比較ランキング5選！家族用・コスパ別選び方",
+    "slug": "emergency-food-ranking",
+    "markdown_path": "C:\\Users\\takas\\Documents\\affiliate\\sites\\disaster\\output\\ranking-emergency-food-ranking.md",
+    "status": "draft",
+    "wordpress_post_id": 148,
+    "created_at": "2026-07-15T08:02:22.119734+00:00"
   }
 ]

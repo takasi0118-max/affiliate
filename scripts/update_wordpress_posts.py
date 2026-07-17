@@ -25,7 +25,12 @@ if str(PROJECT_ROOT) not in sys.path:
 from config.settings import load_settings
 from providers.rakuten_provider import RakutenProduct
 from providers.wordpress_provider import WordPressProvider
-from services.post_target_registry import PostTarget, load_post_targets
+from services.post_target_registry import (
+    PostTarget,
+    load_allowed_slugs_by_theme,
+    load_post_targets,
+)
+from services.article_link_sanitizer import sanitize_article_references
 from services.seo_service import SeoService
 from services.wordpress_post_service import WordPressPostService
 
@@ -122,6 +127,7 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
     service = WordPressPostService(provider)
     seo_service = SeoService()
     product_cache: dict[Path, list[RakutenProduct]] = {}
+    allowed_slugs_by_theme = load_allowed_slugs_by_theme()
 
     provider.test_connection()
     print("WordPress connection: OK")
@@ -151,6 +157,12 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
             article_products = product_cache[product_source]
 
         markdown_content = markdown_path.read_text(encoding="utf-8")
+        allowed_slugs = allowed_slugs_by_theme.get(target.theme, set())
+        if allowed_slugs:
+            markdown_content = sanitize_article_references(
+                markdown_content,
+                allowed_slugs,
+            )
         seo = seo_service.analyze_article(markdown_content)
         updated_id = service.update_post_with_markdown(
             post_id=target.post_id,
