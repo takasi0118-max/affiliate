@@ -252,8 +252,9 @@ def _format_review(review_average: float | None, review_count: int | None) -> st
 
 def theme_product_set_path(output_dir: Path, theme: str) -> Path:
     """Return the JSON path for one theme's shared product catalog."""
-    slug = re.sub(r"\s+", "-", theme.strip())
-    return output_dir / f"product-set-{slug}.json"
+    from services.theme_path_service import theme_product_set_path as resolve_path
+
+    return resolve_path(output_dir, theme)
 
 
 def format_product_names_list(

@@ -29,6 +29,7 @@ from services.product_ranking_service import (
     save_theme_product_set,
     theme_product_set_path,
 )
+from services.theme_path_service import article_markdown_path, resolve_theme_slug
 from services.seo_service import SeoService
 from services.inline_related_link_service import InlineRelatedLinkService, load_theme_article_links
 from services.article_link_sanitizer import sanitize_article_references
@@ -40,10 +41,12 @@ from services.post_target_registry import load_allowed_slugs_by_theme, load_post
 THEME = "防災リュック"
 KEYWORD = "防災リュック"
 OUTPUT_DIR = PROJECT_ROOT / "sites/disaster/output"
+SITE_DIR = PROJECT_ROOT / "sites/disaster"
+THEME_SLUG = resolve_theme_slug(THEME, SITE_DIR)
 CATALOG_PATH = theme_product_set_path(OUTPUT_DIR, THEME)
-PRODUCT_MD = OUTPUT_DIR / "product-bousai-rucksack-select.md"
-RANKING_MD = OUTPUT_DIR / "ranking-bousai-backpack-ranking.md"
-PROBLEM_MD = OUTPUT_DIR / "problem-emergency-backpack-how-to-choose.md"
+PRODUCT_MD = article_markdown_path(OUTPUT_DIR, THEME_SLUG, "product")
+RANKING_MD = article_markdown_path(OUTPUT_DIR, THEME_SLUG, "ranking")
+PROBLEM_MD = article_markdown_path(OUTPUT_DIR, THEME_SLUG, "problem")
 PRODUCT_POST_ID = 9
 RANKING_POST_ID = 10
 
@@ -202,7 +205,7 @@ def _build_product_metadata() -> str:
             "article_type: product",
             "seo_title: 【初心者向け】防災リュックおすすめ10選！選び方と必要な中身を解説",
             "meta_description: 防災リュックの選び方を初心者向けに解説。楽天市場で人気の防災セット10選をコンパクトに紹介。1人用・2人用の特徴や失敗しない選び方もわかりやすく整理します。",
-            "slug: bousai-rucksack-select",
+            f"slug: best-{THEME_SLUG}",
             "---",
             "",
         ]
@@ -218,7 +221,7 @@ def _build_ranking_metadata() -> str:
             "article_type: ranking",
             "seo_title: 【2026年】防災リュックおすすめ比較ランキング5選！防災士が選ぶ選び方",
             "meta_description: 人気防災リュック5商品を比較表とランキング形式で徹底解説。1位から5位まで、用途別の選び方やメリット・デメリットを詳しく紹介します。",
-            "slug: bousai-backpack-ranking",
+            f"slug: ranking-{THEME_SLUG}",
             "---",
             "",
         ]

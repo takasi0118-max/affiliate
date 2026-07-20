@@ -36,6 +36,11 @@ from services.product_ranking_service import (
     save_theme_product_set,
     theme_product_set_path,
 )
+from services.theme_path_service import (
+    article_markdown_path,
+    article_slug,
+    resolve_theme_slug,
+)
 from services.seo_service import SeoService
 from services.wordpress_post_service import WordPressPostService
 
@@ -117,23 +122,14 @@ def load_theme_config(theme: str, keyword: str) -> ThemeArticleConfig:
             f"Theme '{theme}' is missing history records for: {', '.join(missing)}"
         )
 
-    def _md_path(record: dict) -> Path:
-        raw = str(record.get("markdown_path", ""))
-        path = Path(raw)
-        if path.is_absolute():
-            try:
-                return PROJECT_ROOT / path.relative_to(PROJECT_ROOT)
-            except ValueError:
-                return path
-        return PROJECT_ROOT / path
-
     product_record = by_type["product"]
     ranking_record = by_type["ranking"]
     problem_record = by_type["problem"]
 
-    product_md = _md_path(product_record)
-    ranking_md = _md_path(ranking_record)
-    problem_md = _md_path(problem_record)
+    theme_slug = resolve_theme_slug(theme, site_config.site_dir)
+    product_md = article_markdown_path(site_config.output_dir, theme_slug, "product")
+    ranking_md = article_markdown_path(site_config.output_dir, theme_slug, "ranking")
+    problem_md = article_markdown_path(site_config.output_dir, theme_slug, "problem")
 
     product_seo = _read_front_matter(product_md) if product_md.exists() else {}
     ranking_seo = _read_front_matter(ranking_md) if ranking_md.exists() else {}
@@ -148,21 +144,27 @@ def load_theme_config(theme: str, keyword: str) -> ThemeArticleConfig:
         product_post_id=int(product_record.get("wordpress_post_id", 0)),
         ranking_post_id=int(ranking_record.get("wordpress_post_id", 0)),
         product_seo_title=_with_10_select(
-            product_seo.get("seo_title", f"【初心者向け】{theme}おすすめ10選")
+            product_seo.get(
+                "seo_title",
+                str(product_record.get("title", f"【初心者向け】{theme}おすすめ10選")),
+            )
         ),
         product_meta_description=product_seo.get(
             "meta_description",
             f"{theme}の選び方とおすすめ10選を初心者向けに解説します。",
         ),
-        product_slug=str(product_record.get("slug", product_seo.get("slug", ""))),
+        product_slug=article_slug("product", theme_slug),
         ranking_seo_title=str(
-            ranking_record.get("title", ranking_seo.get("seo_title", f"{theme}比較ランキング5選"))
+            ranking_seo.get(
+                "seo_title",
+                ranking_record.get("title", f"{theme}比較ランキング5選"),
+            )
         ),
         ranking_meta_description=ranking_seo.get(
             "meta_description",
             f"人気{theme}5商品を比較表とランキング形式で解説します。",
         ),
-        ranking_slug=str(ranking_record.get("slug", ranking_seo.get("slug", ""))),
+        ranking_slug=article_slug("ranking", theme_slug),
     )
 
 
