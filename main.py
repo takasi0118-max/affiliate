@@ -14,10 +14,23 @@ from services.article_consistency_service import (
     ArticleConsistencyError,
     ArticleConsistencyService,
 )
-from services.article_generator import ArticleGenerator
+from services.article_generator import ArticleGenerator, GeneratedArticle
 from services.internal_link_service import InternalLinkService
 from services.markdown_service import MarkdownService
-from services.product_service import ProductService
+from services.article_product_block_builder import (
+    ProductBlocksError,
+    ensure_affiliate_blocks_for_article,
+)
+from services.product_ranking_service import (
+    ThemeProductSet,
+    fetch_theme_product_set,
+    format_problem_reference_products,
+    format_product_article_prompt,
+    format_product_names_list,
+    format_ranking_article_prompt,
+    save_theme_product_set,
+    theme_product_set_path,
+)
 from services.prompt_manager import PromptManager
 from services.seo_service import SeoService
 from services.site_manager import ArticleHistoryRecord, SiteManager
@@ -26,6 +39,15 @@ from utils.logger import setup_logging
 
 
 logger = logging.getLogger(__name__)
+
+
+def _replace_article_content(article: GeneratedArticle, content: str) -> GeneratedArticle:
+    """Return a copy of a generated article with updated Markdown content."""
+    return GeneratedArticle(
+        theme=article.theme,
+        article_type=article.article_type,
+        content=content,
+    )
 
 
 def main() -> None:
@@ -56,8 +78,6 @@ def main() -> None:
         access_key=settings.rakuten_access_key,
         affiliate_id=settings.rakuten_affiliate_id,
     )
-    # ProductServiceは楽天商品を取得し、記事生成で使いやすい文章へ整える担当。
-    product_service = ProductService(rakuten_provider)
     # GeminiProviderはGemini APIとの通信だけを担当する。
     gemini_provider = GeminiProvider(
         api_key=settings.gemini_api_key,
@@ -106,57 +126,80 @@ def main() -> None:
         # 最後のprintで空かどうかを見れば、接続成功/失敗を判定できる。
         rakuten_error = ""
         gemini_error = ""
+        product_set: ThemeProductSet | None = None
         try:
-            # 記事テーマに関連する楽天商品を取得し、商品紹介の材料にする。
-            product_result = product_service.search_for_article(
+            product_set = fetch_theme_product_set(
+                rakuten_provider,
+                theme=next_theme,
                 keyword=next_theme,
                 hits=10,
             )
-            products = product_result.products
-        except RakutenApiError as error:
-            logger.error("Rakuten API request failed: %s", error)
-            # 楽天APIが失敗しても、アプリ全体は止めずにGemini疎通確認へ進める。
+            save_theme_product_set(
+                theme_product_set_path(site_config.output_dir, next_theme),
+                product_set,
+            )
+            products = product_set.all_products
+        except (RakutenApiError, ValueError) as error:
+            logger.error("Rakuten product set build failed: %s", error)
             products = []
-            product_result = None
+            product_set = None
             rakuten_error = str(error)
 
         try:
-            product_prompt_text = (
-                product_result.prompt_text
-                if product_result is not None
-                else ProductService.format_products_for_prompt(products)
-            )
-            # STEP11では、1テーマ目の正式な悩み記事を生成する。
+            if product_set is None:
+                raise GeminiApiError(
+                    "Cannot generate articles without at least 5 Rakuten products."
+                )
+
+            problem_prompt_text = format_problem_reference_products(product_set)
+            product_prompt_text = format_product_article_prompt(product_set)
+            ranking_prompt_text = format_ranking_article_prompt(product_set)
+            product_order_text = format_product_names_list(product_set.product_display_order)
+            ranking_order_text = format_product_names_list(product_set.ranking_top5)
+
             problem_article = article_generator.generate_problem_article(
                 theme=next_theme,
                 category=site_manager.get_default_category(),
                 tags=site_manager.get_default_tags(),
-                products=product_prompt_text,
+                products=problem_prompt_text,
             )
-            # 生成した悩み記事からSEOメタ情報と見出し構成を読み取って確認する。
-            problem_seo_analysis = seo_service.analyze_article(problem_article.content)
 
-            # STEP12では、同じ楽天商品情報を使って商品紹介記事も生成する。
             product_article = article_generator.generate_product_article(
                 theme=next_theme,
                 category=site_manager.get_default_category(),
                 tags=site_manager.get_default_tags(),
                 products=product_prompt_text,
+                product_order=product_order_text,
             )
-            # 商品記事もSEO要素を満たしているか確認する。
-            product_seo_analysis = seo_service.analyze_article(product_article.content)
+            product_body, product_set = ensure_affiliate_blocks_for_article(
+                product_article.content,
+                product_set,
+                "product",
+                output_dir=site_config.output_dir,
+                rakuten_provider=rakuten_provider,
+            )
+            product_article = _replace_article_content(product_article, product_body)
 
-            # STEP13では、同じ商品情報を比較表とランキング形式の記事にも使う。
             ranking_article = article_generator.generate_ranking_article(
                 theme=next_theme,
                 category=site_manager.get_default_category(),
                 tags=site_manager.get_default_tags(),
-                products=product_prompt_text,
+                products=ranking_prompt_text,
+                ranking_order=ranking_order_text,
             )
-            # 比較記事もSEO要素を満たしているか確認する。
+            ranking_body, product_set = ensure_affiliate_blocks_for_article(
+                ranking_article.content,
+                product_set,
+                "ranking",
+                output_dir=site_config.output_dir,
+                rakuten_provider=rakuten_provider,
+            )
+            ranking_article = _replace_article_content(ranking_article, ranking_body)
+
+            problem_seo_analysis = seo_service.analyze_article(problem_article.content)
+            product_seo_analysis = seo_service.analyze_article(product_article.content)
             ranking_seo_analysis = seo_service.analyze_article(ranking_article.content)
 
-            # 3記事間の矛盾がないか、保存前にGeminiで必ず確認する。
             consistency_result = article_consistency_service.require_consistent_article_set(
                 theme=next_theme,
                 problem_article=problem_article,
@@ -257,6 +300,18 @@ def main() -> None:
             problem_seo_analysis = None
             product_seo_analysis = None
             ranking_seo_analysis = None
+        except ProductBlocksError as error:
+            logger.error("Affiliate product block validation failed: %s", error)
+            problem_article = None
+            product_article = None
+            ranking_article = None
+            linked_articles = None
+            markdown_result = None
+            wordpress_post_result = None
+            gemini_error = str(error)
+            problem_seo_analysis = None
+            product_seo_analysis = None
+            ranking_seo_analysis = None
         except (GeminiApiError, errors.APIError) as error:
             logger.error("Gemini article generation failed: %s", error)
             # Gemini側で失敗した場合も、原因をターミナルに表示するため文字列で保持する。
@@ -273,7 +328,7 @@ def main() -> None:
     else:
         # すべてのテーマが処理済みなら、API通信は行わずに結果表示だけ行う。
         products = []
-        product_result = None
+        product_set = None
         rakuten_error = ""
         gemini_error = ""
         problem_article = None
@@ -380,7 +435,10 @@ def main() -> None:
         print(f"Product WordPress post ID: {wordpress_post_result.product.post_id}")
         print(f"Ranking WordPress post ID: {wordpress_post_result.ranking.post_id}")
     print(f"Rakuten products: {len(products)}")
-    print(f"Product prompt ready: {bool(product_result and product_result.prompt_text)}")
+    print(f"Theme product set ready: {bool(product_set)}")
+    if product_set is not None:
+        print(f"Product display order: {len(product_set.product_display_order)}")
+        print(f"Ranking top5: {len(product_set.ranking_top5)}")
     print(f"Rakuten connected: {not rakuten_error}")
     if rakuten_error:
         print(f"Rakuten error: {rakuten_error}")

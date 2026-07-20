@@ -17,15 +17,17 @@ from services.article_consistency_service import (
     ArticleConsistencyError,
     ArticleConsistencyService,
 )
-from services.article_product_block_builder import inject_product_blocks_for_sections
+from services.article_product_block_builder import inject_and_validate_affiliate_blocks
 from services.prompt_manager import PromptManager
 from services.product_ranking_service import (
     RankedProduct,
     ThemeProductSet,
     fetch_theme_product_set,
+    format_product_names_list,
     format_products_for_prompt,
     load_theme_product_set,
     save_theme_product_set,
+    theme_product_set_path,
 )
 from services.seo_service import SeoService
 from services.inline_related_link_service import InlineRelatedLinkService, load_theme_article_links
@@ -37,10 +39,11 @@ from services.post_target_registry import load_allowed_slugs_by_theme, load_post
 
 THEME = "防災リュック"
 KEYWORD = "防災リュック"
-CATALOG_PATH = PROJECT_ROOT / "sites/disaster/output/bousai-rucksack-product-set.json"
-PRODUCT_MD = PROJECT_ROOT / "sites/disaster/output/product-bousai-rucksack-select.md"
-RANKING_MD = PROJECT_ROOT / "sites/disaster/output/ranking-bousai-backpack-ranking.md"
-PROBLEM_MD = PROJECT_ROOT / "sites/disaster/output/problem-emergency-backpack-how-to-choose.md"
+OUTPUT_DIR = PROJECT_ROOT / "sites/disaster/output"
+CATALOG_PATH = theme_product_set_path(OUTPUT_DIR, THEME)
+PRODUCT_MD = OUTPUT_DIR / "product-bousai-rucksack-select.md"
+RANKING_MD = OUTPUT_DIR / "ranking-bousai-backpack-ranking.md"
+PROBLEM_MD = OUTPUT_DIR / "problem-emergency-backpack-how-to-choose.md"
 PRODUCT_POST_ID = 9
 RANKING_POST_ID = 10
 
@@ -63,10 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _product_names_list(products: list[RankedProduct]) -> str:
     """Return numbered product names for prompts."""
-    return "\n".join(
-        f"{index}. {product.name}"
-        for index, product in enumerate(products, start=1)
-    )
+    return format_product_names_list(products)
 
 
 def _generate_product_article(
@@ -246,16 +246,18 @@ def regenerate(skip_wordpress: bool = False, use_catalog: bool = False) -> None:
     print(f"Products: {len(product_set.products)} / Top5 ranks: {[p.rank for p in product_set.ranking_top5]}")
     print("Generating product article...")
     product_body = _generate_product_article(gemini, product_set)
-    product_body = inject_product_blocks_for_sections(
+    product_body = inject_and_validate_affiliate_blocks(
         product_body,
         list(product_set.product_display_order),
+        "product",
     )
 
     print("Generating ranking article...")
     ranking_body = _generate_ranking_article(gemini, product_set)
-    ranking_body = inject_product_blocks_for_sections(
+    ranking_body = inject_and_validate_affiliate_blocks(
         ranking_body,
         list(product_set.ranking_top5),
+        "ranking",
     )
 
     prompt_manager = PromptManager(settings.site_key)

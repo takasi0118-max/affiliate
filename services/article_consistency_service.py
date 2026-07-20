@@ -93,7 +93,7 @@ class ArticleConsistencyService:
         products: str = "",
     ) -> ArticleConsistencyResult:
         """Ask Gemini to review three articles for contradictions."""
-        prompt = self.prompt_manager.load_common_prompt("article_consistency_check").format(
+        prompt = self._render_consistency_prompt(
             theme=theme,
             products=products or "（商品リストなし）",
             problem_article=_article_body(problem_article),
@@ -122,6 +122,28 @@ class ArticleConsistencyService:
         else:
             logger.info("Article consistency check passed for theme: %s", theme)
         return result
+
+    def _render_consistency_prompt(
+        self,
+        *,
+        theme: str,
+        products: str,
+        problem_article: str,
+        product_article: str,
+        ranking_article: str,
+    ) -> str:
+        """Fill the consistency prompt without interpreting other brace literals."""
+        template = self.prompt_manager.load_common_prompt("article_consistency_check")
+        replacements = {
+            "theme": theme,
+            "products": products,
+            "problem_article": problem_article,
+            "product_article": product_article,
+            "ranking_article": ranking_article,
+        }
+        for key, value in replacements.items():
+            template = template.replace("{" + key + "}", value)
+        return template
 
     def require_consistent_article_set(
         self,

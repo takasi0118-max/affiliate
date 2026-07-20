@@ -26,9 +26,9 @@ class GeminiProvider:
         self.model = model
 
     @retry(
-        max_attempts=2,
-        delay_seconds=2.0,
-        exceptions=(errors.APIError,),
+        max_attempts=3,
+        delay_seconds=3.0,
+        exceptions=(errors.APIError, GeminiApiError),
         logger=logger,
     )
     def generate_text(

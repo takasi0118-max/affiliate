@@ -66,6 +66,7 @@ class ArticleGenerator:
         category: str,
         tags: list[str],
         products: str,
+        product_order: str,
     ) -> GeneratedArticle:
         """Generate a product introduction article."""
         # 商品紹介記事は、楽天商品を個別に説明して購入判断を助ける記事。
@@ -76,6 +77,7 @@ class ArticleGenerator:
             category=category,
             tags=tags,
             products=products,
+            extra_variables={"product_order": product_order},
         )
 
     def generate_ranking_article(
@@ -84,6 +86,7 @@ class ArticleGenerator:
         category: str,
         tags: list[str],
         products: str,
+        ranking_order: str,
     ) -> GeneratedArticle:
         """Generate a comparison ranking article."""
         # 比較記事は、複数商品をランキングや表で比べる購入直前向けの記事。
@@ -94,6 +97,7 @@ class ArticleGenerator:
             category=category,
             tags=tags,
             products=products,
+            extra_variables={"ranking_order": ranking_order},
         )
 
     def _generate_article(
@@ -104,19 +108,25 @@ class ArticleGenerator:
         category: str,
         tags: list[str],
         products: str,
+        extra_variables: dict[str, str] | None = None,
     ) -> GeneratedArticle:
         """Build a prompt and generate an article from it."""
         # 共通SEO指示、共通記事構成、サイト別プロンプトを結合して最終プロンプトを作る。
         # variablesの値が、prompt内の{theme}や{products}に差し込まれる。
+        variables = {
+            "theme": theme,
+            "article_type": article_type,
+            "category": category,
+            "tags": ", ".join(tags),
+            "products": products,
+            "product_order": "",
+            "ranking_order": "",
+        }
+        if extra_variables:
+            variables.update(extra_variables)
         prompt = self.prompt_manager.build_prompt(
             prompt_name=prompt_name,
-            variables={
-                "theme": theme,
-                "article_type": article_type,
-                "category": category,
-                "tags": ", ".join(tags),
-                "products": products,
-            },
+            variables=variables,
         )
         # Providerを経由してLLMへの通信を隠蔽し、記事生成サービス側は本文だけ受け取る。
         content = self.gemini_provider.generate_text(prompt)

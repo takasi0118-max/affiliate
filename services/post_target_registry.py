@@ -28,10 +28,6 @@ LEGACY_POST_TARGETS: dict[int, PostTarget] = {
         "problem",
         Path("sites/disaster/output/problem-emergency-backpack-how-to-choose.md"),
         theme="防災リュック",
-        needs_products=True,
-        product_markdown_path=Path(
-            "sites/disaster/output/product-bousai-rucksack-select.md"
-        ),
     ),
     9: PostTarget(
         9,
@@ -94,15 +90,6 @@ def load_allowed_slugs_by_theme() -> dict[str, set[str]]:
 
 def _build_targets_from_history(history: list[dict[str, Any]]) -> dict[int, PostTarget]:
     """Build post targets from history.json records."""
-    product_paths_by_theme = {
-        str(record["theme"]): _normalize_markdown_path(str(record["markdown_path"]))
-        for record in history
-        if _is_history_record(record)
-        and record.get("article_type") == "product"
-        and record.get("theme")
-        and record.get("markdown_path")
-    }
-
     targets: dict[int, PostTarget] = {}
     for record in history:
         if not _is_history_record(record):
@@ -119,16 +106,11 @@ def _build_targets_from_history(history: list[dict[str, Any]]) -> dict[int, Post
             continue
 
         theme = str(record.get("theme", ""))
-        needs_products = article_type == "problem"
         targets[post_id] = PostTarget(
             post_id=post_id,
             article_type=article_type,
             markdown_path=_normalize_markdown_path(markdown_path),
             theme=theme,
-            needs_products=needs_products,
-            product_markdown_path=(
-                product_paths_by_theme.get(theme) if needs_products else None
-            ),
         )
     return targets
 
