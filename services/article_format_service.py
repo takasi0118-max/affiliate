@@ -7,7 +7,11 @@ from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 import markdown
 
 from providers.rakuten_provider import RakutenProduct
-from services.markdown_product_block_service import normalize_affiliate_blocks_in_markdown
+from services.markdown_product_block_service import (
+    link_product_names_in_summary,
+    normalize_affiliate_blocks_in_markdown,
+    resolve_products_for_article,
+)
 from services.article_toc_service import (
     convert_detail_subheadings,
     normalize_list_entry_headings,
@@ -61,8 +65,12 @@ class ArticleFormatService:
         cleaned_content = clean_generated_markdown(
             normalize_affiliate_blocks_in_markdown(markdown_content)
         )
+        if article_type in {"product", "ranking"}:
+            cleaned_content = link_product_names_in_summary(cleaned_content)
         body_html = _markdown_to_html(cleaned_content)
-        product_affiliates = _build_product_affiliates(products or [])
+        product_affiliates = _build_product_affiliates(
+            resolve_products_for_article(cleaned_content, products, article_type)
+        )
         return _apply_article_layout(body_html, article_format, product_affiliates)
 
 
@@ -450,6 +458,10 @@ def _build_existing_product_cards(soup: BeautifulSoup, article_type: str) -> Non
         if meta_list is None:
             continue
 
+        meta_only_list, detail_nodes = _split_product_metadata_list(soup, meta_list)
+        if meta_only_list is None:
+            continue
+
         card = soup.new_tag("div")
         card["class"] = ["affiliate-product-card", f"affiliate-product-card--{article_type}"]
 
@@ -464,9 +476,102 @@ def _build_existing_product_cards(soup: BeautifulSoup, article_type: str) -> Non
         card.append(detail_column)
         image_container.insert_before(card)
         image_column.append(image_container.extract())
-        detail_column.append(meta_list.extract())
+        detail_column.append(meta_only_list)
         _ensure_product_card_cta(soup, detail_column, product_url)
+        _insert_nodes_after(card, detail_nodes)
         _remove_clear_div_after(image_container)
+        if meta_list.parent and not meta_list.find_all("li"):
+            meta_list.decompose()
+
+
+def _split_product_metadata_list(
+    soup: BeautifulSoup,
+    meta_list: Tag,
+) -> tuple[Tag | None, list[Tag]]:
+    """Keep price/review metadata in the card and move detail sections outside it."""
+    meta_items: list[Tag] = []
+    detail_nodes: list[Tag] = []
+
+    for list_item in list(meta_list.find_all("li", recursive=False)):
+        label = _extract_product_detail_label(list_item.get_text(" ", strip=True))
+        if label in _PRODUCT_DETAIL_LABELS:
+            detail_nodes.extend(_convert_detail_list_item(soup, list_item, label))
+            continue
+        if _is_product_meta_list_item(list_item.get_text(" ", strip=True)):
+            meta_items.append(list_item.extract())
+            continue
+        detail_nodes.append(list_item.extract())
+
+    if not meta_items:
+        return None, detail_nodes
+
+    meta_only_list = soup.new_tag("ul")
+    for item in meta_items:
+        meta_only_list.append(item)
+    return meta_only_list, detail_nodes
+
+
+_PRODUCT_DETAIL_LABELS = ("特徴", "メリット", "デメリット", "初心者向け説明")
+_PRODUCT_META_LABELS = (
+    "商品名",
+    "価格",
+    "通常価格",
+    "参考価格",
+    "レビュー",
+    "おすすめ度",
+    "詳細リンク",
+    "寄付金額",
+)
+
+
+def _extract_product_detail_label(text: str) -> str | None:
+    """Return a product detail label when a list item uses the inline bullet format."""
+    cleaned = text.strip()
+    for label in _PRODUCT_DETAIL_LABELS:
+        if cleaned.startswith(label):
+            return label
+    return None
+
+
+def _is_product_meta_list_item(text: str) -> bool:
+    """Return whether one list item belongs inside the product metadata card."""
+    return any(label in text for label in _PRODUCT_META_LABELS)
+
+
+def _convert_detail_list_item(
+    soup: BeautifulSoup,
+    list_item: Tag,
+    label: str,
+) -> list[Tag]:
+    """Convert inline detail bullets into styled blocks outside the product card."""
+    nodes: list[Tag] = []
+    if label != "初心者向け説明":
+        heading = soup.new_tag("p")
+        heading["class"] = ["affiliate-detail-heading"]
+        strong = soup.new_tag("strong")
+        strong.string = label
+        heading.append(strong)
+        nodes.append(heading)
+
+    item_text = list_item.get_text(" ", strip=True)
+    inline_text = re.sub(rf"^{re.escape(label)}(?:[:：]\s*)?", "", item_text).strip()
+    nested_list = list_item.find(["ul", "ol"])
+    if inline_text and label in {"特徴", "初心者向け説明"}:
+        paragraph = soup.new_tag("p")
+        paragraph.string = inline_text
+        nodes.append(paragraph)
+    if nested_list is not None:
+        nodes.append(nested_list.extract())
+    list_item.decompose()
+    return nodes
+
+
+def _insert_nodes_after(anchor: Tag, nodes: list[Tag]) -> None:
+    """Insert converted detail nodes immediately after one anchor element."""
+    insert_after = anchor
+    for node in nodes:
+        insert_after.insert_after(node)
+        insert_after = node
 
 
 def _find_following_meta_list(start: Tag) -> Tag | None:

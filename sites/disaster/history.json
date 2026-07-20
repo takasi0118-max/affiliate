@@ -42,7 +42,7 @@
   {
     "theme": "非常食",
     "article_type": "product",
-    "title": "非常食セットおすすめ5選！5年保存で家族を守る選び方と人気商品を解説",
+    "title": "非常食セットおすすめ10選！5年保存で家族を守る選び方と人気商品を解説",
     "slug": "emergency-food-sets",
     "markdown_path": "C:\\Users\\takas\\Documents\\affiliate\\sites\\disaster\\output\\product-emergency-food-sets.md",
     "status": "draft",
@@ -58,5 +58,35 @@
     "status": "draft",
     "wordpress_post_id": 148,
     "created_at": "2026-07-15T08:02:22.119734+00:00"
+  },
+  {
+    "theme": "ポータブル電源",
+    "article_type": "problem",
+    "title": "防災用ポータブル電源の選び方！初心者の失敗を防ぐ容量と機能の基準",
+    "slug": "portable-power-station-disaster-prevention",
+    "markdown_path": "C:\\Users\\takas\\Documents\\affiliate\\sites\\disaster\\output\\problem-portable-power-station-disaster-prevention.md",
+    "status": "draft",
+    "wordpress_post_id": 229,
+    "created_at": "2026-07-17T06:12:44.609123+00:00"
+  },
+  {
+    "theme": "ポータブル電源",
+    "article_type": "product",
+    "title": "防災用ポータブル電源おすすめ10選！非常時に備える選び方も解説",
+    "slug": "portable-power-station-disaster-prevention",
+    "markdown_path": "C:\\Users\\takas\\Documents\\affiliate\\sites\\disaster\\output\\product-portable-power-station-disaster-prevention.md",
+    "status": "draft",
+    "wordpress_post_id": 230,
+    "created_at": "2026-07-17T06:12:44.609161+00:00"
+  },
+  {
+    "theme": "ポータブル電源",
+    "article_type": "ranking",
+    "title": "防災用ポータブル電源おすすめ比較ランキング5選！選び方も解説",
+    "slug": "portable-power-station-disaster-prevention",
+    "markdown_path": "C:\\Users\\takas\\Documents\\affiliate\\sites\\disaster\\output\\ranking-portable-power-station-disaster-prevention.md",
+    "status": "draft",
+    "wordpress_post_id": 231,
+    "created_at": "2026-07-17T06:12:44.609178+00:00"
   }
 ]

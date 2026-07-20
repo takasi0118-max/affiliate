@@ -4,9 +4,15 @@ from dataclasses import dataclass
 
 from providers.rakuten_provider import RakutenProduct
 from providers.wordpress_provider import WordPressProvider
-from services.article_generator import GeneratedArticle
 from services.article_format_service import ArticleFormatService, clean_generated_markdown
+from services.markdown_product_block_service import normalize_product_detail_sections
+from services.article_generator import GeneratedArticle
+from services.article_product_block_builder import (
+    MIN_PRODUCT_BLOCKS_BY_TYPE,
+    ProductBlocksError,
+)
 from services.internal_link_service import LinkedArticleSet
+from services.markdown_product_block_service import has_product_blocks
 from services.seo_service import SeoAnalysis
 
 
@@ -77,11 +83,14 @@ class WordPressPostService:
         products: list[RakutenProduct] | None = None,
     ) -> PostedArticle:
         """Create one WordPress draft post."""
-        # SEOタイトルが読めない場合でも、テーマと記事種別から下書きタイトルを作る。
         title = seo.seo_title or _fallback_title(article)
+        _require_affiliate_blocks_for_post(article)
+        content = article.content
+        if article.article_type == "product":
+            content = normalize_product_detail_sections(content)
         content = self.article_format_service.format_article(
             article_type=article.article_type,
-            markdown_content=article.content,
+            markdown_content=content,
             products=products,
         )
         post_id = self.wordpress_provider.create_draft_post(
@@ -101,7 +110,9 @@ class WordPressPostService:
         products: list[RakutenProduct] | None = None,
     ) -> int:
         """Update an existing WordPress post with HTML converted from Markdown."""
-        # 既存のMarkdownをHTML化し、作成済み下書きの本文だけを差し替える。
+        _require_affiliate_blocks_for_markdown(markdown_content, article_type)
+        if article_type == "product":
+            markdown_content = normalize_product_detail_sections(markdown_content)
         html_content = self.article_format_service.format_article(
             article_type=article_type,
             markdown_content=markdown_content,
@@ -138,3 +149,22 @@ def _fallback_title(article: GeneratedArticle) -> str:
         "ranking": "比較ランキング記事",
     }
     return f"{article.theme}の{labels.get(article.article_type, '記事')}"
+
+
+def _require_affiliate_blocks_for_post(article: GeneratedArticle) -> None:
+    """Abort WordPress posting when product/ranking articles lack affiliate blocks."""
+    _require_affiliate_blocks_for_markdown(article.content, article.article_type)
+
+
+def _require_affiliate_blocks_for_markdown(content: str, article_type: str) -> None:
+    """Abort WordPress posting when required affiliate image links are missing."""
+    minimum = MIN_PRODUCT_BLOCKS_BY_TYPE.get(article_type)
+    if minimum is None:
+        return
+    cleaned = clean_generated_markdown(content)
+    if has_product_blocks(cleaned, minimum=minimum):
+        return
+    raise ProductBlocksError(
+        f"Refusing to post {article_type} article to WordPress without at least "
+        f"{minimum} Rakuten affiliate image links."
+    )

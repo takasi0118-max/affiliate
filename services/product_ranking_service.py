@@ -248,3 +248,41 @@ def _format_review(review_average: float | None, review_count: int | None) -> st
     if review_average is None or review_count is None:
         return "レビュー情報なし"
     return f"レビュー平均: {review_average} / 件数: {review_count:,}件"
+
+
+def theme_product_set_path(output_dir: Path, theme: str) -> Path:
+    """Return the JSON path for one theme's shared product catalog."""
+    slug = re.sub(r"\s+", "-", theme.strip())
+    return output_dir / f"product-set-{slug}.json"
+
+
+def format_product_names_list(
+    products: tuple[RankedProduct, ...] | list[RankedProduct],
+) -> str:
+    """Return numbered product names for Gemini prompts."""
+    return "\n".join(
+        f"{index}. {product.name}"
+        for index, product in enumerate(products, start=1)
+    )
+
+
+def format_problem_reference_products(product_set: ThemeProductSet) -> str:
+    """Format all products as reference text for problem articles."""
+    return format_products_for_prompt(list(product_set.products))
+
+
+def format_product_article_prompt(product_set: ThemeProductSet) -> str:
+    """Format product details and display order for product articles."""
+    return "\n\n".join(
+        [
+            "【紹介順（10商品）】",
+            format_products_for_prompt(list(product_set.product_display_order)),
+            "【参考: 比較ランキング上位5】",
+            format_products_for_prompt(list(product_set.ranking_top5)),
+        ]
+    )
+
+
+def format_ranking_article_prompt(product_set: ThemeProductSet) -> str:
+    """Format ranked top 5 products for ranking articles."""
+    return format_products_for_prompt(list(product_set.ranking_top5))

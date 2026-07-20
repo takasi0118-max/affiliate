@@ -22,8 +22,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import load_settings
-from providers.rakuten_provider import RakutenProduct
+from providers.rakuten_provider import RakutenProduct, RakutenProvider
 from providers.wordpress_provider import WordPressProvider
+from services.article_product_block_builder import (
+    MIN_PRODUCT_BLOCKS_BY_TYPE,
+    ensure_affiliate_blocks_for_theme_markdown,
+)
 from services.post_target_registry import (
     PostTarget,
     load_allowed_slugs_by_theme,
@@ -32,6 +36,7 @@ from services.post_target_registry import (
 from services.article_link_sanitizer import sanitize_article_references
 from services.markdown_product_block_service import (
     has_product_blocks,
+    normalize_product_detail_sections,
     parse_products_from_markdown,
 )
 from services.inline_related_link_service import (
@@ -40,11 +45,6 @@ from services.inline_related_link_service import (
 )
 from services.seo_service import SeoService
 from services.wordpress_post_service import WordPressPostService
-
-MIN_PRODUCT_BLOCKS_BY_TYPE = {
-    "product": 10,
-    "ranking": 5,
-}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -141,6 +141,11 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
         username=settings.wordpress_username,
         app_password=settings.wordpress_app_password,
     )
+    rakuten_provider = RakutenProvider(
+        application_id=settings.rakuten_application_id,
+        access_key=settings.rakuten_access_key,
+        affiliate_id=settings.rakuten_affiliate_id,
+    )
     service = WordPressPostService(provider)
     seo_service = SeoService()
     product_cache: dict[Path, list[RakutenProduct]] = {}
@@ -177,6 +182,30 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
             _validate_problem_products(target, article_products)
 
         markdown_content = markdown_path.read_text(encoding="utf-8")
+        if target.article_type in MIN_PRODUCT_BLOCKS_BY_TYPE and target.theme:
+            repaired_content, _ = ensure_affiliate_blocks_for_theme_markdown(
+                markdown_content,
+                target.theme,
+                target.article_type,
+                output_dir=settings.output_dir,
+                rakuten_provider=rakuten_provider,
+            )
+            if repaired_content != markdown_content:
+                markdown_path.write_text(repaired_content, encoding="utf-8")
+                print(
+                    f"Repaired Rakuten affiliate blocks in "
+                    f"{markdown_path.relative_to(PROJECT_ROOT).as_posix()}"
+                )
+                markdown_content = repaired_content
+        if target.article_type == "product":
+            normalized_content = normalize_product_detail_sections(markdown_content)
+            if normalized_content != markdown_content:
+                markdown_path.write_text(normalized_content, encoding="utf-8")
+                print(
+                    f"Normalized product detail headings in "
+                    f"{markdown_path.relative_to(PROJECT_ROOT).as_posix()}"
+                )
+                markdown_content = normalized_content
         allowed_slugs = allowed_slugs_by_theme.get(target.theme, set())
         if allowed_slugs:
             markdown_content = sanitize_article_references(
