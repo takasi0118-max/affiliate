@@ -36,6 +36,19 @@ class SeoAnalysis:
         )
 
 
+def replace_seo_slug(seo: SeoAnalysis, slug: str) -> SeoAnalysis:
+    """Return a copy of SeoAnalysis with a forced slug."""
+    return SeoAnalysis(
+        seo_title=seo.seo_title,
+        meta_description=seo.meta_description,
+        slug=slug,
+        h2_count=seo.h2_count,
+        h3_count=seo.h3_count,
+        faq_count=seo.faq_count,
+        has_summary=seo.has_summary,
+    )
+
+
 class SeoService:
     """Analyze generated Markdown articles for SEO readiness."""
 

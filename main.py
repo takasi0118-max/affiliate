@@ -32,8 +32,13 @@ from services.product_ranking_service import (
     theme_product_set_path,
 )
 from services.prompt_manager import PromptManager
-from services.seo_service import SeoService
+from services.seo_service import SeoService, replace_seo_slug
 from services.site_manager import ArticleHistoryRecord, SiteManager
+from services.theme_path_service import (
+    article_slug,
+    resolve_theme_slug,
+    to_project_relative_path,
+)
 from services.wordpress_post_service import WordPressPostService
 from utils.logger import setup_logging
 
@@ -200,6 +205,20 @@ def main() -> None:
             product_seo_analysis = seo_service.analyze_article(product_article.content)
             ranking_seo_analysis = seo_service.analyze_article(ranking_article.content)
 
+            theme_slug = resolve_theme_slug(next_theme, site_config.site_dir)
+            problem_seo_analysis = replace_seo_slug(
+                problem_seo_analysis,
+                article_slug("problem", theme_slug),
+            )
+            product_seo_analysis = replace_seo_slug(
+                product_seo_analysis,
+                article_slug("product", theme_slug),
+            )
+            ranking_seo_analysis = replace_seo_slug(
+                ranking_seo_analysis,
+                article_slug("ranking", theme_slug),
+            )
+
             consistency_result = article_consistency_service.require_consistent_article_set(
                 theme=next_theme,
                 problem_article=problem_article,
@@ -228,6 +247,7 @@ def main() -> None:
                 product_seo=product_seo_analysis,
                 ranking_seo=ranking_seo_analysis,
                 output_dir=site_config.output_dir,
+                site_dir=site_config.site_dir,
             )
 
             # STEP16では、WordPress接続が成功している場合だけ下書き投稿を作成する。
@@ -254,7 +274,9 @@ def main() -> None:
                             article_type="problem",
                             title=problem_seo_analysis.seo_title,
                             slug=problem_seo_analysis.slug,
-                            markdown_path=str(markdown_result.problem.path),
+                            markdown_path=to_project_relative_path(
+                                markdown_result.problem.path
+                            ),
                             wordpress_post_id=(
                                 wordpress_post_result.problem.post_id
                                 if wordpress_post_result
@@ -265,7 +287,9 @@ def main() -> None:
                             article_type="product",
                             title=product_seo_analysis.seo_title,
                             slug=product_seo_analysis.slug,
-                            markdown_path=str(markdown_result.product.path),
+                            markdown_path=to_project_relative_path(
+                                markdown_result.product.path
+                            ),
                             wordpress_post_id=(
                                 wordpress_post_result.product.post_id
                                 if wordpress_post_result
@@ -276,7 +300,9 @@ def main() -> None:
                             article_type="ranking",
                             title=ranking_seo_analysis.seo_title,
                             slug=ranking_seo_analysis.slug,
-                            markdown_path=str(markdown_result.ranking.path),
+                            markdown_path=to_project_relative_path(
+                                markdown_result.ranking.path
+                            ),
                             wordpress_post_id=(
                                 wordpress_post_result.ranking.post_id
                                 if wordpress_post_result

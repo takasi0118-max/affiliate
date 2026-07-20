@@ -2,11 +2,15 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-import re
 
 from services.article_generator import GeneratedArticle
 from services.internal_link_service import LinkedArticleSet
 from services.seo_service import SeoAnalysis
+from services.theme_path_service import (
+    article_markdown_path,
+    article_slug,
+    resolve_theme_slug,
+)
 from utils.file_io import write_text_file
 
 
@@ -55,12 +59,30 @@ class MarkdownService:
         product_seo: SeoAnalysis,
         ranking_seo: SeoAnalysis,
         output_dir: Path,
+        site_dir: Path | None = None,
     ) -> MarkdownSaveResult:
         """Save problem, product, and ranking articles to Markdown files."""
-        # STEP15では、生成済みの3記事を人が確認できるMarkdownファイルにする。
-        problem = self.save_article(articles.problem_article, problem_seo, output_dir)
-        product = self.save_article(articles.product_article, product_seo, output_dir)
-        ranking = self.save_article(articles.ranking_article, ranking_seo, output_dir)
+        site_dir = site_dir or output_dir.parent
+        theme = articles.problem_article.theme
+        theme_slug = resolve_theme_slug(theme, site_dir)
+        problem = self.save_article(
+            articles.problem_article,
+            problem_seo,
+            output_dir,
+            theme_slug=theme_slug,
+        )
+        product = self.save_article(
+            articles.product_article,
+            product_seo,
+            output_dir,
+            theme_slug=theme_slug,
+        )
+        ranking = self.save_article(
+            articles.ranking_article,
+            ranking_seo,
+            output_dir,
+            theme_slug=theme_slug,
+        )
         return MarkdownSaveResult(problem=problem, product=product, ranking=ranking)
 
     def save_article(
@@ -68,18 +90,27 @@ class MarkdownService:
         article: GeneratedArticle,
         seo: SeoAnalysis,
         output_dir: Path,
+        *,
+        theme_slug: str | None = None,
+        site_dir: Path | None = None,
     ) -> SavedArticle:
         """Save one generated article to a Markdown file."""
-        # slugがあればURLと同じ名前で保存し、無ければテーマと記事種別から仮名を作る。
-        slug = _safe_slug(seo.slug or f"{article.theme}-{article.article_type}")
-        path = output_dir / f"{article.article_type}-{slug}.md"
-        write_text_file(path, _build_markdown_content(article, seo))
+        if theme_slug is None:
+            site_dir = site_dir or output_dir.parent
+            theme_slug = resolve_theme_slug(article.theme, site_dir)
+        slug = article_slug(article.article_type, theme_slug)
+        path = article_markdown_path(output_dir, theme_slug, article.article_type)
+        write_text_file(path, _build_markdown_content(article, seo, slug))
         return SavedArticle(article_type=article.article_type, path=path)
 
 
-def _build_markdown_content(article: GeneratedArticle, seo: SeoAnalysis) -> str:
+def _build_markdown_content(
+    article: GeneratedArticle,
+    seo: SeoAnalysis,
+    slug: str,
+) -> str:
     """Build Markdown content with a small metadata header."""
-    # 本文の先頭に管理用メタ情報を置くと、後で保存ファイルだけ見ても内容を判断しやすい。
+    # slugはファイル名と同じ値に固定し、WordPress URLと出力名を一致させる。
     metadata = "\n".join(
         [
             "---",
@@ -87,21 +118,9 @@ def _build_markdown_content(article: GeneratedArticle, seo: SeoAnalysis) -> str:
             f"article_type: {article.article_type}",
             f"seo_title: {seo.seo_title}",
             f"meta_description: {seo.meta_description}",
-            f"slug: {seo.slug}",
+            f"slug: {slug}",
             "---",
             "",
         ]
     )
     return f"{metadata}{article.content.strip()}\n"
-
-
-def _safe_slug(value: str) -> str:
-    """Return a filesystem-safe slug."""
-    # Windowsのファイル名で使えない文字をハイフンへ置き換える。
-    # 日本語slugはそのまま残し、Geminiが日本語slugを返しても保存できるようにする。
-    slug = value.strip().lower()
-    slug = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", slug)
-    slug = re.sub(r"\s+", "-", slug)
-    slug = re.sub(r"-{2,}", "-", slug).strip("-")
-    slug = slug.rstrip(". ")
-    return slug or "article"

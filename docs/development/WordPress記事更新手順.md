@@ -29,9 +29,9 @@ Cursorがなくても、コマンドだけで実行できます。
 
 | 投稿ID | 記事タイプ | Markdownファイル |
 |--------|-----------|------------------|
-| 8 | 悩み記事（problem） | `sites/disaster/output/problem-emergency-backpack-how-to-choose.md` |
-| 9 | 商品紹介（product） | `sites/disaster/output/product-bousai-rucksack-select.md` |
-| 10 | ランキング（ranking） | `sites/disaster/output/ranking-bousai-backpack-ranking.md` |
+| 8 | 悩み記事（problem） | `sites/disaster/output/emergency-backpack/guide-emergency-backpack.md` |
+| 9 | 商品紹介（product） | `sites/disaster/output/emergency-backpack/best-emergency-backpack.md` |
+| 10 | ランキング（ranking） | `sites/disaster/output/emergency-backpack/ranking-emergency-backpack.md` |
 
 一覧を確認する:
 
@@ -41,7 +41,7 @@ python scripts\update_wordpress_posts.py --list
 
 ## 基本的な流れ
 
-1. `sites/disaster/output/` の Markdown を編集する
+1. `sites/disaster/output/{theme-slug}/` の Markdown を編集する
 2. 更新コマンドを実行する
 3. WordPress 管理画面で表示を確認する
 

@@ -26,19 +26,23 @@ LEGACY_POST_TARGETS: dict[int, PostTarget] = {
     8: PostTarget(
         8,
         "problem",
-        Path("sites/disaster/output/problem-emergency-backpack-how-to-choose.md"),
+        Path("sites/disaster/output/emergency-backpack/guide-emergency-backpack.md"),
         theme="防災リュック",
     ),
     9: PostTarget(
         9,
         "product",
-        Path("sites/disaster/output/product-bousai-rucksack-select.md"),
+        Path("sites/disaster/output/emergency-backpack/best-emergency-backpack.md"),
         theme="防災リュック",
+        needs_products=False,
+        product_markdown_path=Path(
+            "sites/disaster/output/emergency-backpack/best-emergency-backpack.md"
+        ),
     ),
     10: PostTarget(
         10,
         "ranking",
-        Path("sites/disaster/output/ranking-bousai-backpack-ranking.md"),
+        Path("sites/disaster/output/emergency-backpack/ranking-emergency-backpack.md"),
         theme="防災リュック",
     ),
 }
@@ -80,9 +84,9 @@ def load_allowed_slugs_by_theme() -> dict[str, set[str]]:
     if not slugs_by_theme:
         slugs_by_theme = {
             "防災リュック": {
-                "emergency-backpack-how-to-choose",
-                "bousai-rucksack-select",
-                "bousai-backpack-ranking",
+                "guide-emergency-backpack",
+                "best-emergency-backpack",
+                "ranking-emergency-backpack",
             },
         }
     return slugs_by_theme
