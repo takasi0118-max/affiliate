@@ -9,6 +9,7 @@ from providers.rakuten_provider import RakutenProvider
 from services.markdown_product_block_service import (
     ProductBlock,
     count_affiliate_image_links,
+    diagnose_product_section_injection,
     inject_missing_product_blocks,
     normalize_product_detail_sections,
     normalize_product_price_lines,
@@ -97,12 +98,14 @@ def ensure_affiliate_blocks_for_article(
         return content, product_set
 
     products = _products_for_article_type(product_set, article_type)
+    first_error: ProductBlocksError | None = None
     try:
         return (
             inject_and_validate_affiliate_blocks(content, products, article_type),
             product_set,
         )
-    except ProductBlocksError as first_error:
+    except ProductBlocksError as exc:
+        first_error = exc
         if not allow_refetch or rakuten_provider is None:
             raise
 
@@ -208,15 +211,20 @@ def _require_affiliate_block_count(
     actual = count_affiliate_image_links(content)
     if actual >= minimum:
         return
+    diagnosis = diagnose_product_section_injection(content)
     raise ProductBlocksError(
         f"{article_type} article requires at least {minimum} Rakuten affiliate image links, "
-        f"but only {actual} were found after injection."
+        f"but only {actual} were found after injection "
+        f"(numbered headings: {diagnosis['numbered_headings']}, "
+        f"with price lines: {diagnosis['headings_with_price']})."
     )
 
 
 def _short_product_name(name: str) -> str:
-    """Return a shorter alt text for product images."""
+    """Return a shorter alt text safe for Markdown image syntax."""
     cleaned = re.sub(r"\s+", " ", name).strip()
+    cleaned = re.sub(r"[\[\]\(\)]", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if len(cleaned) <= 48:
-        return cleaned
+        return cleaned or "楽天商品"
     return cleaned[:45] + "..."

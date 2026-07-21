@@ -42,7 +42,7 @@ class ConsistencyIssue:
 
     @property
     def is_blocking(self) -> bool:
-        """Return whether this issue should block article save."""
+        """Return whether this issue is severity=error (reported, not auto-blocking)."""
         return self.severity.lower() == "error"
 
 
@@ -58,7 +58,7 @@ class ArticleConsistencyResult:
 
     @property
     def blocking_issues(self) -> tuple[ConsistencyIssue, ...]:
-        """Return issues that must be fixed before saving."""
+        """Return severity=error issues for reporting."""
         return tuple(issue for issue in self.issues if issue.is_blocking)
 
     @property
@@ -153,7 +153,7 @@ class ArticleConsistencyService:
         ranking_article: GeneratedArticle | str,
         products: str = "",
     ) -> ArticleConsistencyResult:
-        """Validate the article set and raise if blocking contradictions exist."""
+        """Validate the article set; kept for scripts that still want a hard fail."""
         result = self.validate_article_set(
             theme=theme,
             problem_article=problem_article,
