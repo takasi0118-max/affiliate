@@ -88,5 +88,65 @@
     "status": "draft",
     "wordpress_post_id": 231,
     "created_at": "2026-07-17T06:12:44.609178+00:00"
+  },
+  {
+    "theme": "救急セット",
+    "article_type": "problem",
+    "title": "防災用救急セットの準備で迷う方へ！必要な中身と失敗しない選び方",
+    "slug": "guide-first-aid-kit",
+    "markdown_path": "sites/disaster/output/first-aid-kit/guide-first-aid-kit.md",
+    "status": "draft",
+    "wordpress_post_id": 265,
+    "created_at": "2026-07-20T03:15:42.428304+00:00"
+  },
+  {
+    "theme": "救急セット",
+    "article_type": "product",
+    "title": "防災用救急セットおすすめ10選！非常時に役立つ選び方と備え",
+    "slug": "best-first-aid-kit",
+    "markdown_path": "sites/disaster/output/first-aid-kit/best-first-aid-kit.md",
+    "status": "draft",
+    "wordpress_post_id": 266,
+    "created_at": "2026-07-20T03:15:42.428400+00:00"
+  },
+  {
+    "theme": "救急セット",
+    "article_type": "ranking",
+    "title": "【防災士監修】救急セットおすすめ比較ランキング5選！選び方と必要アイテムを解説",
+    "slug": "ranking-first-aid-kit",
+    "markdown_path": "sites/disaster/output/first-aid-kit/ranking-first-aid-kit.md",
+    "status": "draft",
+    "wordpress_post_id": 267,
+    "created_at": "2026-07-20T03:15:42.428468+00:00"
+  },
+  {
+    "theme": "懐中電灯",
+    "article_type": "problem",
+    "title": "防災用懐中電灯の選び方で悩む方へ！失敗しない備えとおすすめ基準",
+    "slug": "guide-flashlight",
+    "markdown_path": "sites/disaster/output/flashlight/guide-flashlight.md",
+    "status": "draft",
+    "wordpress_post_id": 278,
+    "created_at": "2026-07-21T01:13:16.633121+00:00"
+  },
+  {
+    "theme": "懐中電灯",
+    "article_type": "product",
+    "title": "防災用懐中電灯おすすめ10選！停電や災害時に備える選び方を徹底解説",
+    "slug": "best-flashlight",
+    "markdown_path": "sites/disaster/output/flashlight/best-flashlight.md",
+    "status": "draft",
+    "wordpress_post_id": 279,
+    "created_at": "2026-07-21T01:13:16.633168+00:00"
+  },
+  {
+    "theme": "懐中電灯",
+    "article_type": "ranking",
+    "title": "【防災プロ厳選】懐中電灯おすすめランキング5選！非常用の選び方",
+    "slug": "ranking-flashlight",
+    "markdown_path": "sites/disaster/output/flashlight/ranking-flashlight.md",
+    "status": "draft",
+    "wordpress_post_id": 280,
+    "created_at": "2026-07-21T01:13:16.633195+00:00"
   }
 ]

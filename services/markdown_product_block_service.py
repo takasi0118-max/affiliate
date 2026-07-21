@@ -28,20 +28,24 @@ PRODUCT_BLOCK_PATTERN = re.compile(
     re.DOTALL,
 )
 PRODUCT_SECTION_TITLE_PATTERN = re.compile(
-    r"^###\s+(?:\d+位[：:]|\d+\.\s*)(.+)$",
+    r"^###\s+(?:\d+位[：:]|\d+[\.．]\s*)(.+)$",
     re.MULTILINE,
 )
 QUOTED_PRODUCT_NAME_PATTERN = re.compile(r"「([^」]+)」")
-PRODUCT_NAME_LINE_PATTERN = re.compile(r"^\*\s+\*\*商品名\*\*:\s*(.+)$", re.MULTILINE)
-PRICE_LINE_PATTERN = re.compile(r"^\*?\s*\*\*(?:通常|参考)?価格\*\*:")
-REVIEW_LINE_PATTERN = re.compile(r"^\*?\s*\*\*レビュー(?:評価)?\*\*:")
-RECOMMEND_LINE_PATTERN = re.compile(r"^\*?\s*\*\*おすすめ度\*\*:")
+PRODUCT_NAME_LINE_PATTERN = re.compile(r"^[-*]\s+\*\*商品名\*\*\s*[：:]\s*(.+)$", re.MULTILINE)
+PRICE_LINE_PATTERN = re.compile(
+    r"^[-*]?\s*\*\*(?:通常|参考|税込|販売)?価格\*\*\s*[：:]"
+)
+REVIEW_LINE_PATTERN = re.compile(r"^[-*]?\s*\*\*レビュー(?:評価)?\*\*\s*[：:]")
+RECOMMEND_LINE_PATTERN = re.compile(r"^[-*]?\s*\*\*おすすめ度\*\*\s*[：:]")
 PRICE_LABEL_NORMALIZE_PATTERN = re.compile(
-    r"^(\*?\s*)\*\*(?:通常|参考)?価格\*\*:",
+    r"^([-*]?\s*)\*\*(?:通常|参考|税込|販売)?価格\*\*\s*[：:]",
     re.MULTILINE,
 )
 RANKING_RECOMMEND_SCORES = (5.0, 4.8, 4.6, 4.4, 4.2)
-PRODUCT_SECTION_HEADING_PATTERN = re.compile(r"^###\s+(?:\d+\.|\d+位)")
+PRODUCT_SECTION_HEADING_PATTERN = re.compile(
+    r"^###\s+(?:\d+[\.．]|\d+位|[0-9]+[\.．])"
+)
 PRODUCT_DETAIL_BULLET_PATTERN = re.compile(
     r"^\*\s+\*\*(特徴|メリット|デメリット|初心者向け説明)\*\*:\s*(.*)$",
     re.MULTILINE,
@@ -63,16 +67,43 @@ class ProductBlock:
 
 def normalize_affiliate_blocks_in_markdown(content: str) -> str:
     """Convert embedded HTML affiliate image links to Markdown image links."""
-    return HTML_PRODUCT_LINK_PATTERN.sub(
-        r"[![\g<name>](\g<img>)](\g<url>)",
-        content,
-    )
+
+    def replace(match: re.Match[str]) -> str:
+        alt = _short_product_name(match.group("name") or "楽天商品")
+        return f"[![{alt}]({match.group('img')})]({match.group('url')})"
+
+    return HTML_PRODUCT_LINK_PATTERN.sub(replace, content)
+
+
+def format_product_image_link(block: ProductBlock) -> str:
+    """Return one Markdown affiliate image link line."""
+    alt_text = _short_product_name(block.name)
+    return f"[![{alt_text}]({block.image_url})]({block.url})"
+
+
+def _short_product_name(name: str) -> str:
+    """Return a shorter alt text safe for Markdown image syntax."""
+    cleaned = re.sub(r"\s+", " ", name).strip()
+    # []() break [![alt](img)](url) parsing/counting; strip them from alt only.
+    cleaned = re.sub(r"[\[\]\(\)]", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) <= 48:
+        return cleaned or "楽天商品"
+    return cleaned[:45] + "..."
 
 
 def count_affiliate_image_links(content: str) -> int:
     """Return how many Rakuten affiliate image links exist in Markdown or HTML."""
     normalized = normalize_affiliate_blocks_in_markdown(content)
-    return len(PRODUCT_IMAGE_LINK_PATTERN.findall(normalized))
+    well_formed = len(PRODUCT_IMAGE_LINK_PATTERN.findall(normalized))
+    # Fallback counts image→affiliate pairs even when alt text contains brackets.
+    loose = len(
+        re.findall(
+            r"\]\([^)\n]+\)\]\(https://hb\.afl\.rakuten\.co\.jp[^)\n]*\)",
+            normalized,
+        )
+    )
+    return max(well_formed, loose)
 
 
 def has_product_blocks(content: str, minimum: int = 1) -> bool:
@@ -100,20 +131,6 @@ def parse_products_from_markdown(content: str) -> list[RakutenProduct]:
     return products
 
 
-def format_product_image_link(block: ProductBlock) -> str:
-    """Return one Markdown affiliate image link line."""
-    alt_text = _short_product_name(block.name)
-    return f"[![{alt_text}]({block.image_url})]({block.url})"
-
-
-def _short_product_name(name: str) -> str:
-    """Return a shorter alt text for product images."""
-    cleaned = re.sub(r"\s+", " ", name).strip()
-    if len(cleaned) <= 48:
-        return cleaned
-    return cleaned[:45] + "..."
-
-
 def format_product_name_line(block: ProductBlock) -> str:
     """Return a Markdown line with the full product name."""
     return f"* **商品名**: {block.name}"
@@ -121,7 +138,14 @@ def format_product_name_line(block: ProductBlock) -> str:
 
 def normalize_product_price_lines(content: str) -> str:
     """Normalize Gemini price labels so affiliate blocks can be injected."""
-    return PRICE_LABEL_NORMALIZE_PATTERN.sub(r"\1**価格**:", content)
+    normalized = PRICE_LABEL_NORMALIZE_PATTERN.sub(r"* **価格**:", content)
+    # Gemini sometimes uses fullwidth digits/periods in product headings.
+    return re.sub(
+        r"^###\s+([0-9]+)．",
+        lambda match: f"### {match.group(1)}.",
+        normalized,
+        flags=re.MULTILINE,
+    )
 
 
 def normalize_product_detail_sections(content: str) -> str:
@@ -304,9 +328,9 @@ def inject_missing_product_blocks(content: str, blocks: list[ProductBlock]) -> s
 
         block = blocks[block_index]
         block_index += 1
-        if AFFILIATE_URL_MARKER in section_text or PRODUCT_IMAGE_LINK_PATTERN.search(
-            section_text
-        ):
+        # Only skip when a countable image affiliate link already exists.
+        # Plain URL text alone should not block injection.
+        if count_affiliate_image_links(section_text) > 0:
             result.extend(section_lines)
             continue
         result.extend(section_lines[:price_line_index])
@@ -314,12 +338,41 @@ def inject_missing_product_blocks(content: str, blocks: list[ProductBlock]) -> s
             result.append("")
         result.append(format_product_image_link(block))
         result.append("")
-        if not re.search(r"^\*\s+\*\*商品名\*\*:", section_text, re.MULTILINE):
+        if not re.search(r"^[-*]\s+\*\*商品名\*\*\s*[：:]", section_text, re.MULTILINE):
             result.append(format_product_name_line(block))
             result.append("")
         result.extend(section_lines[price_line_index:])
 
     return "\n".join(result).strip() + "\n"
+
+
+def diagnose_product_section_injection(content: str) -> dict[str, int]:
+    """Return counts that explain why affiliate injection may under-fill."""
+    headings = 0
+    headings_with_price = 0
+    lines = content.splitlines()
+    index = 0
+    while index < len(lines):
+        if not PRODUCT_SECTION_HEADING_PATTERN.match(lines[index].strip()):
+            index += 1
+            continue
+        headings += 1
+        index += 1
+        section_lines: list[str] = []
+        while index < len(lines) and not PRODUCT_SECTION_HEADING_PATTERN.match(
+            lines[index].strip()
+        ):
+            if lines[index].startswith("## ") and not lines[index].startswith("### "):
+                break
+            section_lines.append(lines[index])
+            index += 1
+        if any(PRICE_LINE_PATTERN.match(line.strip()) for line in section_lines):
+            headings_with_price += 1
+    return {
+        "numbered_headings": headings,
+        "headings_with_price": headings_with_price,
+        "affiliate_image_links": count_affiliate_image_links(content),
+    }
 
 
 def sync_product_section_metadata(

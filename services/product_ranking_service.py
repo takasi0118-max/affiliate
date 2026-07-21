@@ -91,10 +91,13 @@ def build_theme_product_set(
     ranking_size: int = 5,
 ) -> ThemeProductSet:
     """Score products, pick top ranks, and derive a non-ranking display order."""
-    pool = products[:pool_size]
+    reviewed = [product for product in products if _has_reviews(product)]
+    pool = reviewed[:pool_size]
     if len(pool) < ranking_size:
         raise ValueError(
-            f"Need at least {ranking_size} products, but only {len(pool)} were provided."
+            f"Need at least {ranking_size} products with reviews, "
+            f"but only {len(pool)} were available after filtering "
+            f"(fetched={len(products)}, without_reviews={len(products) - len(reviewed)})."
         )
 
     scored = sorted(
@@ -129,7 +132,9 @@ def fetch_theme_product_set(
     ranking_size: int = 5,
 ) -> ThemeProductSet:
     """Fetch products from Rakuten and build a ranked theme set."""
-    products = rakuten_provider.search_items(keyword=keyword, hits=hits)
+    # レビュー0件を除外するため、必要数より多めに取得する（楽天APIの上限は30）。
+    fetch_hits = min(30, max(hits, pool_size * 3))
+    products = rakuten_provider.search_items(keyword=keyword, hits=fetch_hits)
     return build_theme_product_set(
         theme=theme,
         keyword=keyword,
@@ -203,6 +208,11 @@ def format_products_for_prompt(
             )
         )
     return "\n\n".join(lines)
+
+
+def _has_reviews(product: RakutenProduct) -> bool:
+    """Return whether a product has at least one review to show in articles."""
+    return bool(product.review_count and product.review_count > 0)
 
 
 def _score_product(product: RakutenProduct) -> float:
