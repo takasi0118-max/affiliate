@@ -205,7 +205,7 @@ def _build_product_metadata() -> str:
             "article_type: product",
             "seo_title: 【初心者向け】防災リュックおすすめ10選！選び方と必要な中身を解説",
             "meta_description: 防災リュックの選び方を初心者向けに解説。楽天市場で人気の防災セット10選をコンパクトに紹介。1人用・2人用の特徴や失敗しない選び方もわかりやすく整理します。",
-            f"slug: best-{THEME_SLUG}",
+            f"slug: products-{THEME_SLUG}",
             "---",
             "",
         ]

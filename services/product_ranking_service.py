@@ -18,6 +18,7 @@ CATEGORY_ORDER = {
     "キャリー": 3,
     "その他": 4,
 }
+MIN_REVIEW_COUNT = 10
 
 
 @dataclass(frozen=True)
@@ -91,13 +92,22 @@ def build_theme_product_set(
     ranking_size: int = 5,
 ) -> ThemeProductSet:
     """Score products, pick top ranks, and derive a non-ranking display order."""
-    reviewed = [product for product in products if _has_reviews(product)]
+    reviewed = [product for product in products if _has_enough_reviews(product)]
+    # 取得順に依存せず、レビュー件数が多い商品を優先してプールする。
+    reviewed.sort(
+        key=lambda product: (
+            -(product.review_count or 0),
+            -(product.review_average or 0.0),
+            product.name,
+        )
+    )
     pool = reviewed[:pool_size]
-    if len(pool) < ranking_size:
+    if len(pool) < pool_size:
         raise ValueError(
-            f"Need at least {ranking_size} products with reviews, "
+            f"Need at least {pool_size} products with {MIN_REVIEW_COUNT}+ reviews, "
             f"but only {len(pool)} were available after filtering "
-            f"(fetched={len(products)}, without_reviews={len(products) - len(reviewed)})."
+            f"(fetched={len(products)}, "
+            f"below_min_reviews={len(products) - len(reviewed)})."
         )
 
     scored = sorted(
@@ -130,15 +140,66 @@ def fetch_theme_product_set(
     hits: int = 10,
     pool_size: int = 10,
     ranking_size: int = 5,
+    max_pages: int = 5,
 ) -> ThemeProductSet:
     """Fetch products from Rakuten and build a ranked theme set."""
-    # レビュー0件を除外するため、必要数より多めに取得する（楽天APIの上限は30）。
-    fetch_hits = min(30, max(hits, pool_size * 3))
-    products = rakuten_provider.search_items(keyword=keyword, hits=fetch_hits)
+    # 楽天APIには「レビュー10件以上」の直接指定がないため、
+    # 件数降順で複数ページ取得し、条件を満たす商品だけを集める。
+    hits_per_page = 30
+    collected: list[RakutenProduct] = []
+    seen_keys: set[str] = set()
+    fetched_total = 0
+    pages_scanned = 0
+
+    for page in range(1, max_pages + 1):
+        batch = rakuten_provider.search_items(
+            keyword=keyword,
+            hits=hits_per_page,
+            page=page,
+            sort=RakutenProvider.SORT_REVIEW_COUNT_DESC,
+            has_review_flag=1,
+        )
+        pages_scanned = page
+        if not batch:
+            break
+
+        fetched_total += len(batch)
+        for product in batch:
+            if not _has_enough_reviews(product):
+                continue
+            key = product.url or product.name
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            collected.append(product)
+
+        if len(collected) >= pool_size:
+            break
+        # ページ内を件数降順にした先頭が下限未満なら、以降ページも期待できない。
+        highest_count = batch[0].review_count or 0
+        if highest_count < MIN_REVIEW_COUNT:
+            break
+
+    # 採用候補も件数降順で揃えてからプール化する。
+    collected.sort(
+        key=lambda product: (
+            -(product.review_count or 0),
+            -(product.review_average or 0.0),
+            product.name,
+        )
+    )
+
+    if len(collected) < pool_size:
+        raise ValueError(
+            f"Need at least {pool_size} products with {MIN_REVIEW_COUNT}+ reviews, "
+            f"but only {len(collected)} were available after filtering "
+            f"(fetched={fetched_total}, pages_scanned={pages_scanned})."
+        )
+
     return build_theme_product_set(
         theme=theme,
         keyword=keyword,
-        products=products,
+        products=collected,
         pool_size=pool_size,
         ranking_size=ranking_size,
     )
@@ -210,9 +271,9 @@ def format_products_for_prompt(
     return "\n\n".join(lines)
 
 
-def _has_reviews(product: RakutenProduct) -> bool:
-    """Return whether a product has at least one review to show in articles."""
-    return bool(product.review_count and product.review_count > 0)
+def _has_enough_reviews(product: RakutenProduct) -> bool:
+    """Return whether a product has enough reviews to include in articles."""
+    return bool(product.review_count and product.review_count >= MIN_REVIEW_COUNT)
 
 
 def _score_product(product: RakutenProduct) -> float:
@@ -220,7 +281,7 @@ def _score_product(product: RakutenProduct) -> float:
     average = product.review_average or 0.0
     count = product.review_count or 0
     confidence = min(1.0, math.log10(count + 1) / 3)
-    low_review_penalty = 0.75 if count < 10 else 1.0
+    low_review_penalty = 0.75 if count < MIN_REVIEW_COUNT else 1.0
     return average * confidence * low_review_penalty
 
 

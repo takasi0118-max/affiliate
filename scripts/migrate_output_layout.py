@@ -32,7 +32,7 @@ MIGRATIONS = {
         ],
         "product": [
             OUTPUT_DIR / "product-bousai-rucksack-select.md",
-            OUTPUT_DIR / "emergency-backpack" / "best-emergency-backpack.md",
+            OUTPUT_DIR / "emergency-backpack" / "products-emergency-backpack.md",
         ],
         "ranking": [
             OUTPUT_DIR / "ranking-bousai-backpack-ranking.md",
