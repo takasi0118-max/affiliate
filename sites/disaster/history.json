@@ -13,8 +13,8 @@
     "theme": "防災リュック",
     "article_type": "product",
     "title": "【初心者向け】防災リュックおすすめ10選！選び方と必要な中身を解説",
-    "slug": "best-emergency-backpack",
-    "markdown_path": "sites/disaster/output/emergency-backpack/best-emergency-backpack.md",
+    "slug": "products-emergency-backpack",
+    "markdown_path": "sites/disaster/output/emergency-backpack/products-emergency-backpack.md",
     "status": "draft",
     "wordpress_post_id": 9,
     "created_at": "2026-07-15T07:55:14.667329+00:00"
@@ -43,8 +43,8 @@
     "theme": "非常食",
     "article_type": "product",
     "title": "非常食セットおすすめ10選！5年保存で家族を守る選び方と人気商品を解説",
-    "slug": "best-emergency-food",
-    "markdown_path": "sites/disaster/output/emergency-food/best-emergency-food.md",
+    "slug": "products-emergency-food",
+    "markdown_path": "sites/disaster/output/emergency-food/products-emergency-food.md",
     "status": "draft",
     "wordpress_post_id": 147,
     "created_at": "2026-07-15T08:02:22.119698+00:00"
@@ -73,8 +73,8 @@
     "theme": "ポータブル電源",
     "article_type": "product",
     "title": "防災用ポータブル電源おすすめ10選！非常時に備える選び方も解説",
-    "slug": "best-portable-power-station",
-    "markdown_path": "sites/disaster/output/portable-power-station/best-portable-power-station.md",
+    "slug": "products-portable-power-station",
+    "markdown_path": "sites/disaster/output/portable-power-station/products-portable-power-station.md",
     "status": "draft",
     "wordpress_post_id": 230,
     "created_at": "2026-07-17T06:12:44.609161+00:00"
@@ -103,8 +103,8 @@
     "theme": "救急セット",
     "article_type": "product",
     "title": "防災用救急セットおすすめ10選！非常時に役立つ選び方と備え",
-    "slug": "best-first-aid-kit",
-    "markdown_path": "sites/disaster/output/first-aid-kit/best-first-aid-kit.md",
+    "slug": "products-first-aid-kit",
+    "markdown_path": "sites/disaster/output/first-aid-kit/products-first-aid-kit.md",
     "status": "draft",
     "wordpress_post_id": 266,
     "created_at": "2026-07-20T03:15:42.428400+00:00"
@@ -133,8 +133,8 @@
     "theme": "懐中電灯",
     "article_type": "product",
     "title": "防災用懐中電灯おすすめ10選！停電や災害時に備える選び方を徹底解説",
-    "slug": "best-flashlight",
-    "markdown_path": "sites/disaster/output/flashlight/best-flashlight.md",
+    "slug": "products-flashlight",
+    "markdown_path": "sites/disaster/output/flashlight/products-flashlight.md",
     "status": "draft",
     "wordpress_post_id": 279,
     "created_at": "2026-07-21T01:13:16.633168+00:00"
@@ -148,5 +148,65 @@
     "status": "draft",
     "wordpress_post_id": 280,
     "created_at": "2026-07-21T01:13:16.633195+00:00"
+  },
+  {
+    "theme": "簡易トイレ",
+    "article_type": "problem",
+    "title": "【防災】簡易トイレはなぜ必要？よくある失敗と選び方の基本を解説",
+    "slug": "guide-portable-toilet",
+    "markdown_path": "sites/disaster/output/portable-toilet/guide-portable-toilet.md",
+    "status": "draft",
+    "wordpress_post_id": 314,
+    "created_at": "2026-07-21T07:48:06.388551+00:00"
+  },
+  {
+    "theme": "簡易トイレ",
+    "article_type": "product",
+    "title": "簡易トイレおすすめ10選！災害時に備える選び方と非常用トイレを解説",
+    "slug": "products-portable-toilet",
+    "markdown_path": "sites/disaster/output/portable-toilet/products-portable-toilet.md",
+    "status": "draft",
+    "wordpress_post_id": 315,
+    "created_at": "2026-07-21T07:48:06.388577+00:00"
+  },
+  {
+    "theme": "簡易トイレ",
+    "article_type": "ranking",
+    "title": "【2024年】簡易トイレおすすめランキング5選！防災士監修や備蓄用を比較",
+    "slug": "ranking-portable-toilet",
+    "markdown_path": "sites/disaster/output/portable-toilet/ranking-portable-toilet.md",
+    "status": "draft",
+    "wordpress_post_id": 316,
+    "created_at": "2026-07-21T07:48:06.388591+00:00"
+  },
+  {
+    "theme": "保存水",
+    "article_type": "problem",
+    "title": "保存水はどれを選ぶ？防災備蓄の悩みと失敗しない選び方",
+    "slug": "guide-emergency-water",
+    "markdown_path": "sites/disaster/output/emergency-water/guide-emergency-water.md",
+    "status": "draft",
+    "wordpress_post_id": 370,
+    "created_at": "2026-07-23T02:22:38.546348+00:00"
+  },
+  {
+    "theme": "保存水",
+    "article_type": "product",
+    "title": "保存水おすすめ10選！非常時に備える失敗しない選び方と活用法",
+    "slug": "products-emergency-water",
+    "markdown_path": "sites/disaster/output/emergency-water/products-emergency-water.md",
+    "status": "draft",
+    "wordpress_post_id": 371,
+    "created_at": "2026-07-23T02:22:38.546450+00:00"
+  },
+  {
+    "theme": "保存水",
+    "article_type": "ranking",
+    "title": "【2024年】保存水おすすめ比較ランキング5選！失敗しない選び方",
+    "slug": "ranking-emergency-water",
+    "markdown_path": "sites/disaster/output/emergency-water/ranking-emergency-water.md",
+    "status": "draft",
+    "wordpress_post_id": 372,
+    "created_at": "2026-07-23T02:22:38.546502+00:00"
   }
 ]

@@ -11,7 +11,7 @@ from utils.file_io import load_json_file
 
 ARTICLE_FILE_PREFIX = {
     "problem": "guide",
-    "product": "best",
+    "product": "products",
     "ranking": "ranking",
 }
 
@@ -44,7 +44,7 @@ def resolve_theme_slug(theme: str, site_dir: Path) -> str:
 
 
 def article_file_prefix(article_type: str) -> str:
-    """Return guide/best/ranking prefix for one article type."""
+    """Return guide/products/ranking prefix for one article type."""
     try:
         return ARTICLE_FILE_PREFIX[article_type]
     except KeyError as error:

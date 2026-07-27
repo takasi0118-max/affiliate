@@ -32,11 +32,11 @@ LEGACY_POST_TARGETS: dict[int, PostTarget] = {
     9: PostTarget(
         9,
         "product",
-        Path("sites/disaster/output/emergency-backpack/best-emergency-backpack.md"),
+        Path("sites/disaster/output/emergency-backpack/products-emergency-backpack.md"),
         theme="防災リュック",
         needs_products=False,
         product_markdown_path=Path(
-            "sites/disaster/output/emergency-backpack/best-emergency-backpack.md"
+            "sites/disaster/output/emergency-backpack/products-emergency-backpack.md"
         ),
     ),
     10: PostTarget(
@@ -85,7 +85,7 @@ def load_allowed_slugs_by_theme() -> dict[str, set[str]]:
         slugs_by_theme = {
             "防災リュック": {
                 "guide-emergency-backpack",
-                "best-emergency-backpack",
+                "products-emergency-backpack",
                 "ranking-emergency-backpack",
             },
         }

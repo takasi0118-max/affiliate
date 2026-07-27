@@ -30,7 +30,7 @@ Cursorがなくても、コマンドだけで実行できます。
 | 投稿ID | 記事タイプ | Markdownファイル |
 |--------|-----------|------------------|
 | 8 | 悩み記事（problem） | `sites/disaster/output/emergency-backpack/guide-emergency-backpack.md` |
-| 9 | 商品紹介（product） | `sites/disaster/output/emergency-backpack/best-emergency-backpack.md` |
+| 9 | 商品紹介（product） | `sites/disaster/output/emergency-backpack/products-emergency-backpack.md` |
 | 10 | ランキング（ranking） | `sites/disaster/output/emergency-backpack/ranking-emergency-backpack.md` |
 
 一覧を確認する:

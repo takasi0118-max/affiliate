@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 import logging
+from urllib.parse import quote, urlencode
 
 import requests
 
@@ -35,6 +36,8 @@ class RakutenProvider:
 
     # 楽天市場の商品検索APIのURL。商品名や価格などをキーワード検索できる。
     API_URL = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401"
+    # レビュー件数の多い順。楽天仕様上、sort は URL エンコードが必要。
+    SORT_REVIEW_COUNT_DESC = "-reviewCount"
 
     def __init__(self, application_id: str, access_key: str, affiliate_id: str) -> None:
         """Initialize the provider with Rakuten credentials."""
@@ -49,20 +52,35 @@ class RakutenProvider:
         exceptions=(requests.RequestException,),
         logger=logger,
     )
-    def search_items(self, keyword: str, hits: int = 5) -> list[RakutenProduct]:
+    def search_items(
+        self,
+        keyword: str,
+        hits: int = 5,
+        *,
+        sort: str | None = None,
+        page: int = 1,
+        has_review_flag: int = 1,
+    ) -> list[RakutenProduct]:
         """Search Rakuten Ichiba items by keyword."""
         # 楽天APIへ送る検索条件。認証情報は.envから読み込んだ値を使う。
+        # デフォルトはレビュー件数降順。hasReviewFlag=1 でレビューあり商品に限定する。
+        sort_value = sort or self.SORT_REVIEW_COUNT_DESC
         params = {
             "applicationId": self.application_id,
             "accessKey": self.access_key,
             "affiliateId": self.affiliate_id,
             "keyword": keyword,
-            "hits": hits,
+            "hits": min(max(hits, 1), 30),
+            "page": page,
+            "hasReviewFlag": has_review_flag,
             "format": "json",
             "formatVersion": 2,
         }
-        # ネットワーク系の失敗はretryデコレータで最大3回まで再試行する。
-        response = requests.get(self.API_URL, params=params, timeout=15)
+        # sort だけ先にエンコードし、二重エンコードを避けるため URL に直接付与する。
+        query = urlencode(params, safe="")
+        encoded_sort = quote(sort_value, safe="")
+        request_url = f"{self.API_URL}?{query}&sort={encoded_sort}"
+        response = requests.get(request_url, timeout=15)
         self._raise_for_api_error(response)
 
         # 楽天APIのJSONレスポンスからItems配列だけを取り出す。
@@ -71,8 +89,16 @@ class RakutenProvider:
         if not isinstance(items, list):
             raise ValueError("Rakuten API response does not contain an item list.")
 
-        # 取得した商品を1件ずつRakutenProductへ変換し、main.pyへ返す。
-        return [self._parse_product(item) for item in items]
+        # 取得した商品を1件ずつRakutenProductへ変換し、件数降順をクライアント側でも保証する。
+        products = [self._parse_product(item) for item in items]
+        products.sort(
+            key=lambda product: (
+                -(product.review_count or 0),
+                -(product.review_average or 0.0),
+                product.name,
+            )
+        )
+        return products
 
     @staticmethod
     def _raise_for_api_error(response: requests.Response) -> None:
