@@ -108,6 +108,12 @@ def _get_article_format(article_type: str) -> ArticleFormat:
             description="読者の悩みを整理し、原因と解決策へ自然につなげる記事です。",
             wrapper_class="affiliate-article--problem",
         ),
+        "problem_only": ArticleFormat(
+            article_type="problem_only",
+            label="悩み解決記事",
+            description="読者の悩みを整理し、原因と解決策へ自然につなげる記事です。",
+            wrapper_class="affiliate-article--problem",
+        ),
         "product": ArticleFormat(
             article_type="product",
             label="商品紹介記事",
@@ -203,7 +209,7 @@ def _add_common_classes(
 
 def _add_article_type_classes(soup: BeautifulSoup, article_type: str) -> None:
     """Add CSS classes that reflect the role of each article type."""
-    if article_type == "problem":
+    if article_type in {"problem", "problem_only"}:
         _mark_headings(soup, "悩み", "problem-section")
         _mark_headings(soup, "原因", "cause-section")
         _mark_headings(soup, "解決", "solution-section")
@@ -697,7 +703,22 @@ def _convert_faq_sections(soup: BeautifulSoup) -> None:
 def _is_faq_question_heading(heading: Tag) -> bool:
     """Return whether a heading looks like a FAQ question."""
     text = heading.get_text(" ", strip=True)
-    return bool(re.match(r"^Q\d*[\.\s:：]", text, flags=re.IGNORECASE))
+    if re.match(r"^Q\d*[\.\s:：]", text, flags=re.IGNORECASE):
+        return True
+    # SEO向けに「〜ですか？」形式の見出しも、FAQセクション配下なら折りたたみ対象にする。
+    if ("？" in text or "?" in text) and _is_under_faq_section(heading):
+        return True
+    return False
+
+
+def _is_under_faq_section(heading: Tag) -> bool:
+    """Return whether the heading sits under an FAQ H2 section."""
+    for sibling in heading.previous_siblings:
+        if not isinstance(sibling, Tag) or sibling.name != "h2":
+            continue
+        section_title = sibling.get_text(" ", strip=True)
+        return "FAQ" in section_title.upper() or "よくある質問" in section_title
+    return False
 
 
 H1_INLINE_STYLE = "margin:0 0 1.6em;padding:0;"

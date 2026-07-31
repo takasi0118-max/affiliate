@@ -9,6 +9,7 @@ from services.seo_service import SeoAnalysis
 from services.theme_path_service import (
     article_markdown_path,
     article_slug,
+    problem_only_markdown_path,
     resolve_theme_slug,
 )
 from utils.file_io import write_text_file
@@ -99,7 +100,10 @@ class MarkdownService:
             site_dir = site_dir or output_dir.parent
             theme_slug = resolve_theme_slug(article.theme, site_dir)
         slug = article_slug(article.article_type, theme_slug)
-        path = article_markdown_path(output_dir, theme_slug, article.article_type)
+        if article.article_type == "problem_only":
+            path = problem_only_markdown_path(output_dir, theme_slug)
+        else:
+            path = article_markdown_path(output_dir, theme_slug, article.article_type)
         write_text_file(path, _build_markdown_content(article, seo, slug))
         return SavedArticle(article_type=article.article_type, path=path)
 
