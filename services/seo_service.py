@@ -195,10 +195,25 @@ def _looks_like_question(line: str) -> bool:
 def _has_summary_heading(lines: list[str]) -> bool:
     """Return whether the article contains a summary section."""
     # 「まとめ」または英語のSummary見出しがあれば、記事の締めがあると判定する。
+    # SEO向けにテーマ語入りの締め見出し（「〜整えよう」等）も許可する。
+    closing_keywords = (
+        "まとめ",
+        "おわりに",
+        "最後に",
+        "総括",
+        "押さえよう",
+        "整えよう",
+        "始めよう",
+        "確認しよう",
+        "進めよう",
+    )
     for line in lines:
         stripped_line = line.strip()
-        if stripped_line.startswith(("## ", "### ")) and (
-            "まとめ" in stripped_line or "summary" in stripped_line.lower()
-        ):
+        if not stripped_line.startswith(("## ", "### ")):
+            continue
+        lower = stripped_line.lower()
+        if "summary" in lower:
+            return True
+        if any(keyword in stripped_line for keyword in closing_keywords):
             return True
     return False

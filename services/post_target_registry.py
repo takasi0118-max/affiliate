@@ -8,6 +8,7 @@ from typing import Any
 
 from config.settings import PROJECT_ROOT, load_settings
 from config.site_config import load_site_config
+from utils.file_io import load_json_file
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,8 @@ LEGACY_POST_TARGETS: dict[int, PostTarget] = {
     ),
 }
 
+_SUPPORTED_ARTICLE_TYPES = {"problem", "problem_only", "product", "ranking"}
+
 
 def load_theme_slugs(history: list[dict]) -> dict[str, set[str]]:
     """Return allowed article slugs grouped by theme."""
@@ -62,7 +65,7 @@ def load_theme_slugs(history: list[dict]) -> dict[str, set[str]]:
 
 
 def load_post_targets() -> dict[int, PostTarget]:
-    """Return post targets merged from history.json and legacy defaults."""
+    """Return post targets merged from history files and legacy defaults."""
     settings = load_settings()
     site_config = load_site_config(
         site_key=settings.site_key,
@@ -70,6 +73,7 @@ def load_post_targets() -> dict[int, PostTarget]:
     )
     targets = dict(LEGACY_POST_TARGETS)
     targets.update(_build_targets_from_history(site_config.history))
+    targets.update(_build_targets_from_history(_load_problem_history(site_config.site_dir)))
     return targets
 
 
@@ -80,7 +84,26 @@ def load_allowed_slugs_by_theme() -> dict[str, set[str]]:
         site_key=settings.site_key,
         output_dir=settings.output_dir,
     )
-    slugs_by_theme = load_theme_slugs(site_config.history)
+    main_history = site_config.history
+    problem_history = _load_problem_history(site_config.site_dir)
+    slugs_by_theme = load_theme_slugs(main_history)
+    for theme, slugs in load_theme_slugs(problem_history).items():
+        slugs_by_theme.setdefault(theme, set()).update(slugs)
+
+    # Problem-only articles link across product themes, so allow those slugs too.
+    all_product_slugs = {
+        slug
+        for slugs in load_theme_slugs(main_history).values()
+        for slug in slugs
+    }
+    problem_only_themes = {
+        str(record.get("theme"))
+        for record in problem_history
+        if record.get("article_type") == "problem_only" and record.get("theme")
+    }
+    for theme in problem_only_themes:
+        slugs_by_theme[theme] = set(slugs_by_theme.get(theme, set())) | all_product_slugs
+
     if not slugs_by_theme:
         slugs_by_theme = {
             "防災リュック": {
@@ -92,8 +115,19 @@ def load_allowed_slugs_by_theme() -> dict[str, set[str]]:
     return slugs_by_theme
 
 
+def _load_problem_history(site_dir: Path) -> list[dict[str, Any]]:
+    """Load problem-only history records when the file exists."""
+    path = site_dir / "problem_history.json"
+    if not path.exists():
+        return []
+    payload = load_json_file(path)
+    if not isinstance(payload, list):
+        raise TypeError(f"{path} must contain a JSON array.")
+    return [record for record in payload if isinstance(record, dict)]
+
+
 def _build_targets_from_history(history: list[dict[str, Any]]) -> dict[int, PostTarget]:
-    """Build post targets from history.json records."""
+    """Build post targets from history records."""
     targets: dict[int, PostTarget] = {}
     for record in history:
         if not _is_history_record(record):
@@ -104,7 +138,7 @@ def _build_targets_from_history(history: list[dict[str, Any]]) -> dict[int, Post
         markdown_path = record.get("markdown_path")
         if not isinstance(post_id, int) or post_id <= 0:
             continue
-        if article_type not in {"problem", "product", "ranking"}:
+        if article_type not in _SUPPORTED_ARTICLE_TYPES:
             continue
         if not isinstance(markdown_path, str) or not markdown_path:
             continue

@@ -1,0 +1,4 @@
+# One problem-only theme (question-style title) per line.
+# These are separate from themes.txt (product themes for the 3-article set).
+防災グッズで最低限必要なものは？初心者向け準備リスト
+1人暮らしに必要な防災グッズとは？最低限の備えを紹介

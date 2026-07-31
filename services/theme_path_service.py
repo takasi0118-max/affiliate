@@ -11,6 +11,7 @@ from utils.file_io import load_json_file
 
 ARTICLE_FILE_PREFIX = {
     "problem": "guide",
+    "problem_only": "guide",
     "product": "products",
     "ranking": "ranking",
 }
@@ -41,6 +42,44 @@ def resolve_theme_slug(theme: str, site_dir: Path) -> str:
             f"Add it to {site_dir / 'theme_slugs.json'}."
         )
     return theme_slug
+
+
+def load_problem_theme_slugs(site_dir: Path) -> dict[str, str]:
+    """Load problem-only theme (question title) to English slug mapping."""
+    path = site_dir / "problem_theme_slugs.json"
+    if not path.exists():
+        return {}
+    payload = load_json_file(path)
+    if not isinstance(payload, dict):
+        raise TypeError(f"{path} must contain a JSON object.")
+    return {
+        str(theme): _safe_slug(str(slug))
+        for theme, slug in payload.items()
+        if str(theme).strip() and str(slug).strip()
+    }
+
+
+def resolve_problem_theme_slug(theme: str, site_dir: Path) -> str:
+    """Return the English slug for a problem-only theme title."""
+    slugs = load_problem_theme_slugs(site_dir)
+    theme_slug = slugs.get(theme.strip())
+    if not theme_slug:
+        raise ValueError(
+            f"Problem theme slug not found for '{theme}'. "
+            f"Add it to {site_dir / 'problem_theme_slugs.json'}."
+        )
+    return theme_slug
+
+
+def problem_only_article_dir(output_dir: Path, theme_slug: str) -> Path:
+    """Return output/qa/{theme-slug}/ for problem-only articles."""
+    return output_dir / "qa" / theme_slug
+
+
+def problem_only_markdown_path(output_dir: Path, theme_slug: str) -> Path:
+    """Return the Markdown path for one problem-only article."""
+    stem = article_slug("problem_only", theme_slug)
+    return problem_only_article_dir(output_dir, theme_slug) / f"{stem}.md"
 
 
 def article_file_prefix(article_type: str) -> str:

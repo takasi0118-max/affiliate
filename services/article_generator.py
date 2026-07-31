@@ -102,6 +102,22 @@ class ArticleGenerator:
             extra_variables={"ranking_order": ranking_order},
         )
 
+    def generate_problem_only_article(
+        self,
+        theme: str,
+        category: str,
+        tags: list[str],
+    ) -> GeneratedArticle:
+        """Generate a standalone problem article without product/ranking set."""
+        return self._generate_article(
+            prompt_name="problem_only_article",
+            article_type="problem_only",
+            theme=theme,
+            category=category,
+            tags=tags,
+            products="",
+        )
+
     def _generate_article(
         self,
         prompt_name: str,
