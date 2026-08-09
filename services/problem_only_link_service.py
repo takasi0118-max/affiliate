@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 import re
@@ -9,9 +10,14 @@ import re
 from services.article_generator import GeneratedArticle
 from services.article_link_models import ArticleLink
 from services.article_link_sanitizer import sanitize_article_references
+from services.calendar_year_normalizer import (
+    normalize_article_calendar_year,
+    strip_calendar_year_from_title,
+)
 from services.theme_path_service import load_theme_slugs
 
 _INLINE_RELATED_PATTERN = re.compile(
+    r"(?:\n[ \t]*---[ \t]*)?\s*"
     r'<div class="affiliate-inline-related"[^>]*>.*?</div>\s*',
     re.IGNORECASE | re.DOTALL,
 )
@@ -19,6 +25,7 @@ _RELATED_SECTION_PATTERN = re.compile(
     r"\n##\s*関連記事\s*\n[\s\S]*$",
     re.IGNORECASE,
 )
+_PREFERRED_ARTICLE_TYPES = ("problem", "product", "ranking")
 
 
 def select_related_article_links(
@@ -28,17 +35,22 @@ def select_related_article_links(
     *,
     target_count: int = 5,
 ) -> list[ArticleLink]:
-    """Pick existing articles relevant to the problem-only theme."""
+    """Pick existing articles relevant to the problem-only theme.
+
+    悩み・商品紹介・ランキングをできるだけ均等に混ぜ、同じテーマの重複も抑える。
+    """
     product_themes = list(load_theme_slugs(site_dir).keys())
     matched_themes = [name for name in product_themes if name and name in theme]
 
-    scored: list[tuple[int, str, ArticleLink]] = []
+    by_type: dict[str, list[tuple[int, str, ArticleLink]]] = {
+        article_type: [] for article_type in _PREFERRED_ARTICLE_TYPES
+    }
     seen_slugs: set[str] = set()
     for record in history:
         if not isinstance(record, dict):
             continue
         article_type = str(record.get("article_type") or "").strip()
-        if article_type == "problem_only":
+        if article_type not in by_type:
             continue
         title = str(record.get("title") or "").strip()
         slug = str(record.get("slug") or "").strip().strip("/")
@@ -47,68 +59,200 @@ def select_related_article_links(
             continue
         seen_slugs.add(slug)
 
-        score = 0
-        if record_theme in matched_themes:
-            score += 100
-        for name in matched_themes:
-            if name in title:
-                score += 20
-        for name in product_themes:
-            token = name.replace("防災", "").replace("用", "")
-            if len(token) >= 2 and token in theme:
-                if record_theme == name:
-                    score += 40
-                elif token in title:
-                    score += 10
-        type_bonus = {"problem": 3, "product": 2, "ranking": 1}.get(article_type, 0)
-        score += type_bonus
-        scored.append(
+        score = _score_related_candidate(
+            theme=theme,
+            title=title,
+            record_theme=record_theme,
+            article_type=article_type,
+            product_themes=product_themes,
+            matched_themes=matched_themes,
+        )
+        by_type[article_type].append(
             (
                 score,
                 record_theme,
                 ArticleLink(
-                    article_type=article_type or "related",
-                    title=title,
+                    article_type=article_type,
+                    title=_normalize_related_title(article_type, title),
                     url=f"/{slug}/",
                 ),
             )
         )
 
-    scored.sort(key=lambda item: (-item[0], item[1], item[2].title))
-    selected: list[ArticleLink] = []
-    used_themes: set[str] = set()
-    used_types: set[str] = set()
+    for article_type in by_type:
+        by_type[article_type].sort(key=lambda item: (-item[0], item[1], item[2].title))
 
-    for score, record_theme, link in scored:
-        if len(selected) >= target_count:
-            break
-        if record_theme in used_themes:
-            continue
-        if link.article_type in used_types and len(used_types) < 3:
-            continue
-        selected.append(link)
-        used_themes.add(record_theme)
-        used_types.add(link.article_type)
-
+    quotas = _balanced_type_quotas(target_count, by_type)
+    selected = _pick_balanced_links(by_type, quotas, prefer_unique_themes=True)
     if len(selected) < target_count:
-        for _, record_theme, link in scored:
-            if link in selected:
-                continue
-            if record_theme not in used_themes or len(selected) >= target_count - 1:
-                selected.append(link)
-                used_themes.add(record_theme)
-            if len(selected) >= target_count:
-                break
-
-    if len(selected) < target_count:
-        for _, _, link in scored:
-            if link in selected:
-                continue
-            selected.append(link)
-            if len(selected) >= target_count:
-                break
-
+        selected.extend(
+            _pick_balanced_links(
+                by_type,
+                _remaining_type_quotas(target_count - len(selected), by_type, selected),
+                prefer_unique_themes=False,
+                already_selected=selected,
+            )
+        )
     return selected[:target_count]
+
+
+def _normalize_related_title(article_type: str, title: str) -> str:
+    """Normalize related-link titles; strip years from problem article titles."""
+    normalized = normalize_article_calendar_year(title)
+    if article_type in {"problem", "problem_only"}:
+        return strip_calendar_year_from_title(normalized)
+    return normalized
+
+
+def _score_related_candidate(
+    *,
+    theme: str,
+    title: str,
+    record_theme: str,
+    article_type: str,
+    product_themes: list[str],
+    matched_themes: list[str],
+) -> int:
+    """Score how well one history article matches the problem-only theme."""
+    score = 0
+    if record_theme in matched_themes:
+        score += 100
+    for name in matched_themes:
+        if name in title:
+            score += 20
+    for name in product_themes:
+        token = name.replace("防災", "").replace("用", "")
+        if len(token) >= 2 and token in theme:
+            if record_theme == name:
+                score += 40
+            elif token in title:
+                score += 10
+    # 種別ボーナスは小さめにし、関連度のあとにラウンドロビンで均等化する。
+    score += {"problem": 3, "product": 2, "ranking": 1}.get(article_type, 0)
+    return score
+
+
+def _balanced_type_quotas(
+    target_count: int,
+    by_type: dict[str, list[tuple[int, str, ArticleLink]]],
+) -> dict[str, int]:
+    """Return per-type quotas that stay as even as available candidates allow."""
+    available = {
+        article_type: len(candidates)
+        for article_type, candidates in by_type.items()
+    }
+    quotas = {article_type: 0 for article_type in _PREFERRED_ARTICLE_TYPES}
+    if target_count <= 0:
+        return quotas
+
+    remaining = target_count
+    while remaining > 0:
+        progressed = False
+        for article_type in _PREFERRED_ARTICLE_TYPES:
+            if remaining <= 0:
+                break
+            if quotas[article_type] >= available[article_type]:
+                continue
+            quotas[article_type] += 1
+            remaining -= 1
+            progressed = True
+        if not progressed:
+            break
+    return quotas
+
+
+def _remaining_type_quotas(
+    remaining_count: int,
+    by_type: dict[str, list[tuple[int, str, ArticleLink]]],
+    already_selected: list[ArticleLink],
+) -> dict[str, int]:
+    """Build fill-up quotas while keeping type counts as balanced as possible."""
+    selected_counts: dict[str, int] = defaultdict(int)
+    for link in already_selected:
+        selected_counts[link.article_type] += 1
+    available = {
+        article_type: max(0, len(candidates) - selected_counts[article_type])
+        for article_type, candidates in by_type.items()
+    }
+    quotas = {article_type: 0 for article_type in _PREFERRED_ARTICLE_TYPES}
+    remaining = remaining_count
+    while remaining > 0:
+        ordered = sorted(
+            _PREFERRED_ARTICLE_TYPES,
+            key=lambda article_type: (
+                selected_counts[article_type] + quotas[article_type],
+                _PREFERRED_ARTICLE_TYPES.index(article_type),
+            ),
+        )
+        progressed = False
+        for article_type in ordered:
+            if remaining <= 0:
+                break
+            if quotas[article_type] >= available[article_type]:
+                continue
+            quotas[article_type] += 1
+            remaining -= 1
+            progressed = True
+            break
+        if not progressed:
+            break
+    return quotas
+
+
+def _pick_balanced_links(
+    by_type: dict[str, list[tuple[int, str, ArticleLink]]],
+    quotas: dict[str, int],
+    *,
+    prefer_unique_themes: bool,
+    already_selected: list[ArticleLink] | None = None,
+) -> list[ArticleLink]:
+    """Pick links round-robin by type according to quotas."""
+    selected: list[ArticleLink] = []
+    already_selected = already_selected or []
+    used_urls = {link.url.strip("/") for link in already_selected}
+    used_themes = {
+        _theme_from_link(link, by_type)
+        for link in already_selected
+    }
+    used_themes.discard("")
+    type_counts = {article_type: 0 for article_type in _PREFERRED_ARTICLE_TYPES}
+    cursors = {article_type: 0 for article_type in _PREFERRED_ARTICLE_TYPES}
+
+    while True:
+        progressed = False
+        for article_type in _PREFERRED_ARTICLE_TYPES:
+            if type_counts[article_type] >= quotas.get(article_type, 0):
+                continue
+            candidates = by_type.get(article_type) or []
+            while cursors[article_type] < len(candidates):
+                _score, record_theme, link = candidates[cursors[article_type]]
+                cursors[article_type] += 1
+                url_key = link.url.strip("/")
+                if not url_key or url_key in used_urls:
+                    continue
+                if prefer_unique_themes and record_theme and record_theme in used_themes:
+                    continue
+                selected.append(link)
+                used_urls.add(url_key)
+                if record_theme:
+                    used_themes.add(record_theme)
+                type_counts[article_type] += 1
+                progressed = True
+                break
+        if not progressed:
+            break
+    return selected
+
+
+def _theme_from_link(
+    link: ArticleLink,
+    by_type: dict[str, list[tuple[int, str, ArticleLink]]],
+) -> str:
+    """Best-effort theme lookup for an already selected link."""
+    for _score, record_theme, candidate in by_type.get(link.article_type, []):
+        if candidate.url.strip("/") == link.url.strip("/"):
+            return record_theme
+    return ""
 
 
 def apply_related_article_links(
@@ -146,7 +290,7 @@ def _split_inline_and_footer_links(
     footer_count: int,
     inline_count: int,
 ) -> tuple[list[ArticleLink], list[ArticleLink]]:
-    """Return disjoint inline/footer link lists (no shared articles)."""
+    """Return disjoint inline/footer lists, keeping article types balanced in both."""
     unique_links: list[ArticleLink] = []
     seen_urls: set[str] = set()
     for link in links:
@@ -156,18 +300,54 @@ def _split_inline_and_footer_links(
         seen_urls.add(key)
         unique_links.append(link)
 
-    # Prefer filling inline first (3–5), then footer (3) from remaining links.
-    max_inline = min(5, max(3, inline_count), len(unique_links))
-    # Keep at least footer_count for the footer when enough links exist.
-    if len(unique_links) >= footer_count + 3:
-        max_inline = min(max_inline, len(unique_links) - footer_count)
-    max_inline = max(0, min(max_inline, len(unique_links)))
+    if not unique_links:
+        return [], []
 
-    inline_links = unique_links[:max_inline]
-    used = {link.url.strip("/") for link in inline_links}
-    footer_links = [
-        link for link in unique_links if link.url.strip("/") not in used
-    ][:footer_count]
+    by_type: dict[str, list[ArticleLink]] = {
+        article_type: [] for article_type in _PREFERRED_ARTICLE_TYPES
+    }
+    leftovers: list[ArticleLink] = []
+    for link in unique_links:
+        if link.article_type in by_type:
+            by_type[link.article_type].append(link)
+        else:
+            leftovers.append(link)
+
+    # 関連記事（フッター）は種別を均等に先取りする。
+    footer_links: list[ArticleLink] = []
+    while len(footer_links) < footer_count:
+        progressed = False
+        ordered = sorted(
+            _PREFERRED_ARTICLE_TYPES,
+            key=lambda article_type: (
+                sum(1 for item in footer_links if item.article_type == article_type),
+                _PREFERRED_ARTICLE_TYPES.index(article_type),
+            ),
+        )
+        for article_type in ordered:
+            if len(footer_links) >= footer_count:
+                break
+            if not by_type[article_type]:
+                continue
+            footer_links.append(by_type[article_type].pop(0))
+            progressed = True
+            break
+        if not progressed:
+            if leftovers:
+                footer_links.append(leftovers.pop(0))
+                continue
+            break
+
+    remaining = [
+        link
+        for article_type in _PREFERRED_ARTICLE_TYPES
+        for link in by_type[article_type]
+    ] + leftovers
+    max_inline = min(5, max(0, inline_count), len(remaining))
+    if len(remaining) >= 3:
+        max_inline = max(max_inline, min(3, len(remaining)))
+    max_inline = min(max_inline, len(remaining), 5)
+    inline_links = remaining[:max_inline]
     return inline_links, footer_links
 
 
@@ -262,14 +442,9 @@ def _should_skip_inline_heading(heading: str) -> bool:
 def _append_inline_block_to_section(section_text: str, link: ArticleLink) -> str:
     """Append one related box at the end of an H2 section body."""
     block = _inline_related_block(link)
-    text = section_text.rstrip()
-    # Keep a trailing horizontal rule if the section already ends with one.
-    if text.endswith("\n---") or text.endswith("\n---\n"):
-        text = text.rstrip()
-        if text.endswith("---"):
-            without_rule = text[: -len("---")].rstrip()
-            return f"{without_rule}\n\n{block}\n\n---"
-    return f"{text}\n\n{block}"
+    text = re.sub(r"(?:\n[ \t]*---[ \t]*)+\s*$", "", section_text.rstrip()).rstrip()
+    # 区切り線は「あわせて読みたい」の直前だけ。直後には付けない。
+    return f"{text}\n\n---\n\n{block}"
 
 
 def _inline_related_block(link: ArticleLink) -> str:

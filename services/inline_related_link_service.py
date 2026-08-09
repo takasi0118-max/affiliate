@@ -8,9 +8,14 @@ from dataclasses import dataclass
 from config.settings import load_settings
 from config.site_config import load_site_config
 from services.article_link_models import ArticleLink
+from services.calendar_year_normalizer import (
+    normalize_article_calendar_year,
+    strip_calendar_year_from_title,
+)
 
 
 INLINE_RELATED_BLOCK_PATTERN = re.compile(
+    r"(?:\n[ \t]*---[ \t]*)?\s*"
     r'<div class="affiliate-inline-related"[^>]*>.*?</div>\s*',
     re.DOTALL,
 )
@@ -91,9 +96,12 @@ def load_theme_article_links() -> dict[str, dict[str, ArticleLink]]:
             continue
         if not title or not slug:
             continue
+        link_title = normalize_article_calendar_year(title)
+        if article_type == "problem":
+            link_title = strip_calendar_year_from_title(link_title)
         links_by_theme.setdefault(theme, {})[article_type] = ArticleLink(
             article_type=article_type,
-            title=title,
+            title=link_title,
             url=f"/{slug}/",
         )
     return links_by_theme
@@ -172,6 +180,13 @@ def _insert_inline_links(
             target_type=placement.target_type,
             link=target_link,
         )
+        # 直前のセクション末尾 --- はブロック側で付けるので重複させない。
+        trim_at = insert_at
+        while trim_at > 0 and not lines[trim_at - 1].strip():
+            trim_at -= 1
+        if trim_at > 0 and lines[trim_at - 1].strip() == "---":
+            del lines[trim_at - 1 : insert_at]
+            insert_at = trim_at - 1
         block_lines = block.splitlines()
         if insert_at < len(lines) and lines[insert_at].strip():
             block_lines.append("")
@@ -201,7 +216,9 @@ def _format_inline_block(
     link: ArticleLink,
 ) -> str:
     """Return one styled inline related link block."""
+    # 区切り線はブロック直前。直後の --- は付けない。
     return (
+        "---\n\n"
         f'<div class="affiliate-inline-related" data-related-type="{target_type}">'
         '<span class="affiliate-inline-related__label">あわせて読みたい</span> '
         f'<a class="affiliate-link" href="{link.url}">{link.title}</a>'

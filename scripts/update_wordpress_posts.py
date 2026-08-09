@@ -43,7 +43,8 @@ from services.inline_related_link_service import (
     InlineRelatedLinkService,
     load_theme_article_links,
 )
-from services.seo_service import SeoService
+from services.seo_service import SeoService, strip_year_from_problem_seo_title
+from services.calendar_year_normalizer import strip_calendar_year_from_seo_title_fields
 from services.wordpress_post_service import WordPressPostService
 
 
@@ -220,7 +221,16 @@ def update_posts(targets: Sequence[PostTarget]) -> None:
                 theme_article_links,
             )
         _validate_product_blocks(target, markdown_content)
-        seo = seo_service.analyze_article(markdown_content)
+        if target.article_type in {"problem", "problem_only"}:
+            stripped = strip_calendar_year_from_seo_title_fields(markdown_content)
+            if stripped != markdown_content:
+                markdown_path.write_text(stripped, encoding="utf-8")
+                markdown_content = stripped
+            seo = strip_year_from_problem_seo_title(
+                seo_service.analyze_article(markdown_content)
+            )
+        else:
+            seo = seo_service.analyze_article(markdown_content)
         updated_id = service.update_post_with_markdown(
             post_id=target.post_id,
             markdown_content=markdown_content,

@@ -4,6 +4,11 @@ from dataclasses import dataclass
 import json
 import re
 
+from services.calendar_year_normalizer import (
+    normalize_article_calendar_year,
+    strip_calendar_year_from_title,
+)
+
 
 @dataclass(frozen=True)
 class SeoAnalysis:
@@ -49,6 +54,19 @@ def replace_seo_slug(seo: SeoAnalysis, slug: str) -> SeoAnalysis:
     )
 
 
+def strip_year_from_problem_seo_title(seo: SeoAnalysis) -> SeoAnalysis:
+    """Return SEO analysis without calendar years in the title (for problem articles)."""
+    return SeoAnalysis(
+        seo_title=strip_calendar_year_from_title(seo.seo_title),
+        meta_description=seo.meta_description,
+        slug=seo.slug,
+        h2_count=seo.h2_count,
+        h3_count=seo.h3_count,
+        faq_count=seo.faq_count,
+        has_summary=seo.has_summary,
+    )
+
+
 class SeoService:
     """Analyze generated Markdown articles for SEO readiness."""
 
@@ -59,7 +77,7 @@ class SeoService:
         json_metadata = _extract_json_metadata(lines)
         yaml_metadata = _extract_yaml_front_matter(lines)
         return SeoAnalysis(
-            seo_title=(
+            seo_title=normalize_article_calendar_year(
                 yaml_metadata.get("seo_title", "")
                 or json_metadata.get("title", "")
                 or _extract_labeled_value(
@@ -67,7 +85,7 @@ class SeoService:
                     ("SEOタイトル", "SEO タイトル", "seo title", "seo_title", "title", "タイトル"),
                 )
             ),
-            meta_description=(
+            meta_description=normalize_article_calendar_year(
                 yaml_metadata.get("meta_description", "")
                 or json_metadata.get("description", "")
                 or json_metadata.get("meta_description", "")

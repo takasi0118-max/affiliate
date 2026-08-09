@@ -8,5 +8,15 @@
     "status": "draft",
     "wordpress_post_id": 1227,
     "created_at": "2026-07-30T03:02:45.329191+00:00"
+  },
+  {
+    "theme": "1人暮らしに必要な防災グッズとは？最低限の備えを紹介",
+    "article_type": "problem_only",
+    "title": "1人暮らしに必要な防災グッズは？最低限の備えと選び方を解説",
+    "slug": "guide-solo-bousai-goods",
+    "markdown_path": "sites/disaster/output/qa/solo-bousai-goods/guide-solo-bousai-goods.md",
+    "status": "draft",
+    "wordpress_post_id": 1502,
+    "created_at": "2026-08-03T22:40:04.359950+00:00"
   }
 ]

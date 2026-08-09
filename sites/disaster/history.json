@@ -172,7 +172,7 @@
   {
     "theme": "簡易トイレ",
     "article_type": "ranking",
-    "title": "【2024年】簡易トイレおすすめランキング5選！防災士監修や備蓄用を比較",
+    "title": "【2026年】簡易トイレおすすめランキング5選！防災士監修や備蓄用を比較",
     "slug": "ranking-portable-toilet",
     "markdown_path": "sites/disaster/output/portable-toilet/ranking-portable-toilet.md",
     "status": "draft",
@@ -202,7 +202,7 @@
   {
     "theme": "保存水",
     "article_type": "ranking",
-    "title": "【2024年】保存水おすすめ比較ランキング5選！失敗しない選び方",
+    "title": "【2026年】保存水おすすめ比較ランキング5選！失敗しない選び方",
     "slug": "ranking-emergency-water",
     "markdown_path": "sites/disaster/output/emergency-water/ranking-emergency-water.md",
     "status": "draft",
@@ -268,5 +268,35 @@
     "status": "draft",
     "wordpress_post_id": 1040,
     "created_at": "2026-07-28T00:54:02.806361+00:00"
+  },
+  {
+    "theme": "防災ラジオ",
+    "article_type": "problem",
+    "title": "防災ラジオはどれが良い？失敗しない選び方と必要な機能を解説",
+    "slug": "guide-emergency-radio",
+    "markdown_path": "sites/disaster/output/emergency-radio/guide-emergency-radio.md",
+    "status": "draft",
+    "wordpress_post_id": 1507,
+    "created_at": "2026-08-05T22:26:16.851083+00:00"
+  },
+  {
+    "theme": "防災ラジオ",
+    "article_type": "product",
+    "title": "【2026年】防災ラジオおすすめ10選！失敗しない選び方を徹底解説",
+    "slug": "products-emergency-radio",
+    "markdown_path": "sites/disaster/output/emergency-radio/products-emergency-radio.md",
+    "status": "draft",
+    "wordpress_post_id": 1508,
+    "created_at": "2026-08-05T22:26:16.851139+00:00"
+  },
+  {
+    "theme": "防災ラジオ",
+    "article_type": "ranking",
+    "title": "【2026年】防災ラジオおすすめ比較ランキングTOP5！選び方も解説",
+    "slug": "ranking-emergency-radio",
+    "markdown_path": "sites/disaster/output/emergency-radio/ranking-emergency-radio.md",
+    "status": "draft",
+    "wordpress_post_id": 1509,
+    "created_at": "2026-08-05T22:26:16.851163+00:00"
   }
 ]

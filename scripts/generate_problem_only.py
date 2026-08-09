@@ -31,7 +31,11 @@ from services.problem_only_link_service import (
     select_related_article_links,
 )
 from services.prompt_manager import PromptManager
-from services.seo_service import SeoService, replace_seo_slug
+from services.seo_service import (
+    SeoService,
+    replace_seo_slug,
+    strip_year_from_problem_seo_title,
+)
 from services.site_manager import HistoryEntry
 from services.theme_path_service import (
     article_slug,
@@ -199,7 +203,10 @@ def main() -> None:
         print(f"Gemini failed: {error}")
         return
 
-    seo = replace_seo_slug(seo_service.analyze_article(article.content), forced_slug)
+    seo = replace_seo_slug(
+        strip_year_from_problem_seo_title(seo_service.analyze_article(article.content)),
+        forced_slug,
+    )
     related_links = select_related_article_links(
         site_config.history,
         next_theme,

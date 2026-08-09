@@ -5,6 +5,7 @@ from pathlib import Path
 
 from services.article_generator import GeneratedArticle
 from services.internal_link_service import LinkedArticleSet
+from services.article_format_service import ensure_markdown_heading_separators
 from services.seo_service import SeoAnalysis
 from services.theme_path_service import (
     article_markdown_path,
@@ -127,4 +128,5 @@ def _build_markdown_content(
             "",
         ]
     )
-    return f"{metadata}{article.content.strip()}\n"
+    body = ensure_markdown_heading_separators(article.content.strip())
+    return f"{metadata}{body}"
