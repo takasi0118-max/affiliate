@@ -28,7 +28,11 @@ from services.product_ranking_service import (
     theme_product_set_path,
 )
 from services.prompt_manager import PromptManager
-from services.seo_service import SeoService, replace_seo_slug
+from services.seo_service import (
+    SeoService,
+    replace_seo_slug,
+    strip_year_from_problem_seo_title,
+)
 from services.site_manager import ArticleHistoryRecord, SiteManager
 from services.theme_path_service import (
     article_slug,
@@ -191,7 +195,9 @@ def main() -> None:
             )
             ranking_article = _replace_article_content(ranking_article, ranking_body)
 
-            problem_seo_analysis = seo_service.analyze_article(problem_article.content)
+            problem_seo_analysis = strip_year_from_problem_seo_title(
+                seo_service.analyze_article(problem_article.content)
+            )
             product_seo_analysis = seo_service.analyze_article(product_article.content)
             ranking_seo_analysis = seo_service.analyze_article(ranking_article.content)
 

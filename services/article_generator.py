@@ -1,10 +1,14 @@
 """Article generation service using prompt templates and Gemini."""
 
 from dataclasses import dataclass
-from datetime import date
-import re
 
 from providers.gemini_provider import GeminiProvider
+from services.article_format_service import ensure_markdown_heading_separators
+from services.calendar_year_normalizer import (
+    current_calendar_year,
+    normalize_article_calendar_year,
+    strip_calendar_year_from_seo_title_fields,
+)
 from services.prompt_manager import PromptManager
 
 
@@ -131,7 +135,7 @@ class ArticleGenerator:
         """Build a prompt and generate an article from it."""
         # 共通SEO指示、共通記事構成、サイト別プロンプトを結合して最終プロンプトを作る。
         # variablesの値が、prompt内の{theme}や{products}に差し込まれる。
-        current_year = str(date.today().year)
+        current_year = current_calendar_year()
         variables = {
             "theme": theme,
             "article_type": article_type,
@@ -151,31 +155,12 @@ class ArticleGenerator:
         # Providerを経由してLLMへの通信を隠蔽し、記事生成サービス側は本文だけ受け取る。
         content = self.gemini_provider.generate_text(prompt)
         content = normalize_article_calendar_year(content, current_year)
+        # 悩み記事のSEOタイトルには年を入れない。
+        if article_type in {"problem", "problem_only"}:
+            content = strip_calendar_year_from_seo_title_fields(content)
+        content = ensure_markdown_heading_separators(content)
         return GeneratedArticle(
             theme=theme,
             article_type=article_type,
             content=content,
         )
-
-
-def normalize_article_calendar_year(content: str, current_year: str) -> str:
-    """Replace outdated calendar-year markers with the current year."""
-    # Geminiは学習データの影響で【2024年】などを出しやすいため、記事日付表記だけ矯正する。
-    # 「5年保存」のような年数表現や、保存期限の年はそのまま残す。
-    year = int(current_year)
-
-    def _bracket_year(match: re.Match[str]) -> str:
-        found = int(match.group(1))
-        if found == year:
-            return match.group(0)
-        return f"【{current_year}年】"
-
-    def _edition_year(match: re.Match[str]) -> str:
-        found = int(match.group(1))
-        if found == year:
-            return match.group(0)
-        return f"{current_year}年版"
-
-    content = re.sub(r"【(20\d{2})年】", _bracket_year, content)
-    content = re.sub(r"(?<![0-9])(20\d{2})年版", _edition_year, content)
-    return content

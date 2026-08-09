@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 import markdown
 
 from providers.rakuten_provider import RakutenProduct
+from services.calendar_year_normalizer import normalize_article_calendar_year
 from services.markdown_product_block_service import (
     link_product_names_in_summary,
     normalize_affiliate_blocks_in_markdown,
@@ -96,7 +97,183 @@ def clean_generated_markdown(content: str) -> str:
         lines = _strip_labeled_metadata_lines(lines)
         if lines == previous_lines:
             break
-    return "\n".join(lines).strip()
+    cleaned = "\n".join(lines).strip()
+    cleaned = ensure_markdown_heading_separators(cleaned)
+    return normalize_article_calendar_year(cleaned)
+
+
+_HEADING_SECTION_SPLIT = re.compile(r"(?=^#{2,3} )", re.MULTILINE)
+_LIST_LINE_PATTERN = re.compile(r"^(\s*)([-*+]|\d+\.)\s+")
+
+
+def ensure_paragraph_blank_lines(content: str) -> str:
+    """Ensure a blank line between consecutive lines that should be separate paragraphs.
+
+    Markdownでは単一改行だと同一段落になるため、本文の改行は空行付きにする。
+    """
+    if not content or not content.strip():
+        return content
+
+    lines = content.splitlines()
+    result: list[str] = []
+    in_code_fence = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_fence = not in_code_fence
+            result.append(line)
+            continue
+        if in_code_fence:
+            result.append(line)
+            continue
+
+        if not result:
+            result.append(line)
+            continue
+
+        prev = result[-1]
+        prev_stripped = prev.strip()
+        if not prev_stripped or not stripped:
+            result.append(line)
+            continue
+
+        if _should_insert_paragraph_blank_line(prev_stripped, stripped):
+            result.append("")
+        result.append(line)
+
+    normalized = "\n".join(result)
+    if content.endswith("\n"):
+        return normalized + "\n"
+    return normalized
+
+
+def _should_insert_paragraph_blank_line(prev: str, curr: str) -> bool:
+    """Return whether a blank line should separate two non-empty Markdown lines."""
+    if prev == "---" or curr == "---":
+        return False
+    if prev.startswith("|") and curr.startswith("|"):
+        return False
+    if _LIST_LINE_PATTERN.match(prev) and _LIST_LINE_PATTERN.match(curr):
+        return False
+    # リスト行の直後1行だけは同一項目の続きとして残す。
+    if _LIST_LINE_PATTERN.match(prev) and not curr.startswith(("#", "|", "<")):
+        return False
+    if prev.startswith("<") and curr.startswith("<"):
+        return False
+    return True
+
+
+def ensure_markdown_heading_separators(content: str) -> str:
+    """Ensure `---` separators after intro and each H2/H3 section.
+
+    FAQセクション内の各質問H3の間には入れず、FAQブロック全体の末尾だけに入れる。
+    """
+    if not content or not content.strip():
+        return content
+
+    prefix, body = _split_leading_front_matter(content)
+    body = body.strip("\n")
+    if not body.strip():
+        return content if content.endswith("\n") else f"{content.rstrip()}\n"
+
+    parts = _HEADING_SECTION_SPLIT.split(body)
+    normalized_parts: list[str] = []
+    in_faq_section = False
+
+    for part in parts:
+        part = part.strip("\n")
+        if not part.strip():
+            continue
+        part = re.sub(r"(?:\n[ \t]*---[ \t]*)+\s*$", "", part).rstrip()
+        if not part:
+            continue
+
+        first_line = part.splitlines()[0].strip()
+        is_h2 = first_line.startswith("## ") and not first_line.startswith("### ")
+        is_h3 = first_line.startswith("### ")
+        is_faq_h2 = is_h2 and _is_faq_heading_text(first_line)
+
+        if is_h2 and in_faq_section and not is_faq_h2:
+            # FAQブロック終了 → 末尾にだけ区切り線を付ける
+            _append_trailing_separator(normalized_parts)
+            in_faq_section = False
+
+        if is_faq_h2:
+            in_faq_section = True
+            normalized_parts.append(part)
+            continue
+
+        if in_faq_section and is_h3:
+            if normalized_parts:
+                normalized_parts[-1] = f"{normalized_parts[-1].rstrip()}\n\n{part}"
+            else:
+                normalized_parts.append(part)
+            continue
+
+        normalized_parts.append(_with_section_separator(part))
+
+    if in_faq_section:
+        _append_trailing_separator(normalized_parts)
+
+    normalized_body = "\n\n".join(normalized_parts).rstrip() + "\n"
+    normalized_body = ensure_paragraph_blank_lines(normalized_body)
+    if not prefix:
+        return normalized_body
+    return f"{prefix.rstrip()}\n\n{normalized_body}"
+
+
+_INLINE_RELATED_TAIL_PATTERN = re.compile(
+    r"(?:\n[ \t]*---[ \t]*)*"
+    r"(?:\n*<div class=\"affiliate-inline-related\"[^>]*>.*?</div>[ \t]*)+"
+    r"(?:\n[ \t]*---[ \t]*)*"
+    r"\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _with_section_separator(part: str) -> str:
+    """Append section separator, placing it before any related-link box."""
+    part = re.sub(r"(?:\n[ \t]*---[ \t]*)+\s*$", "", part).rstrip()
+    related_match = _INLINE_RELATED_TAIL_PATTERN.search(part)
+    if related_match:
+        body = part[: related_match.start()].rstrip()
+        related = re.sub(
+            r"(?:\n[ \t]*---[ \t]*)+",
+            "\n",
+            related_match.group(0),
+        ).strip()
+        if not body:
+            return related
+        return f"{body}\n\n---\n\n{related}"
+    return f"{part}\n\n---"
+
+
+def _append_trailing_separator(parts: list[str]) -> None:
+    """Ensure the last part ends with a single `---` separator."""
+    if not parts:
+        return
+    parts[-1] = _with_section_separator(parts[-1])
+
+
+def _is_faq_heading_text(heading_line: str) -> bool:
+    """Return whether an H2 line is an FAQ section heading."""
+    text = heading_line.lstrip("# ").strip()
+    return "FAQ" in text.upper() or "よくある質問" in text
+
+
+def _split_leading_front_matter(content: str) -> tuple[str, str]:
+    """Split a leading YAML front matter block from Markdown body."""
+    lines = content.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return "", content
+
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            prefix = "".join(lines[: index + 1])
+            body = "".join(lines[index + 1 :])
+            return prefix, body
+    return "", content
 
 
 def _get_article_format(article_type: str) -> ArticleFormat:
@@ -722,14 +899,6 @@ def _is_under_faq_section(heading: Tag) -> bool:
 
 
 H1_INLINE_STYLE = "margin:0 0 1.6em;padding:0;"
-H2_INLINE_STYLE = (
-    "color:#ffffff;background:#111827;border:none;border-left:none;"
-    "border-radius:0;font-weight:800;padding:18px;margin:38px 0 18px;"
-)
-H3_INLINE_STYLE = (
-    "color:#111827;background:#eef1f5;border-left:4px solid #9aa7b5;"
-    "border-radius:0;font-weight:800;padding:8px 12px;margin:28px 0 12px;"
-)
 DETAIL_HEADING_INLINE_STYLE = (
     "border-top:1px solid #e2e8f0;margin:20px 0 10px;padding:16px 0 0;"
 )
@@ -755,12 +924,9 @@ def _style_product_button(link: Tag) -> None:
 
 def _apply_inline_visual_styles(soup: BeautifulSoup) -> None:
     """Apply inline styles that survive WordPress content sanitization."""
+    # H2/H3の見た目はWordPress追加CSS（article h2 / article h3）に任せる。
     for heading in soup.find_all("h1", class_="affiliate-article-title"):
         heading["style"] = H1_INLINE_STYLE
-    for heading in soup.find_all("h2", class_="affiliate-section-heading"):
-        heading["style"] = H2_INLINE_STYLE
-    for heading in soup.find_all("h3", class_="affiliate-subheading"):
-        heading["style"] = H3_INLINE_STYLE
     for heading in soup.find_all("p", class_="affiliate-detail-heading"):
         heading["style"] = DETAIL_HEADING_INLINE_STYLE
         strong = heading.find("strong")
@@ -802,6 +968,11 @@ def _article_style_block() -> str:
   background: transparent;
   padding: 4px 2px;
   border-radius: 14px;
+}
+.affiliate-article hr {
+  border: none;
+  border-top: 1px solid var(--border-gray);
+  margin: 20px 0 30px;
 }
 .affiliate-article__body h1.affiliate-article-title {
   margin: 0 0 1.6em;
@@ -845,35 +1016,11 @@ def _article_style_block() -> str:
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.affiliate-article__body > h2.affiliate-section-heading,
+/* H2/H3の色・背景・余白はWordPress追加CSS（article h2 / article h3）に任せる */
 .affiliate-article h2.affiliate-section-heading,
-.affiliate-article--ranking h2.affiliate-section-heading,
-.affiliate-article h2.affiliate-section-heading.comparison-section,
-.affiliate-article h2.affiliate-section-heading.ranking-section,
-.affiliate-article h2.affiliate-section-heading.ranking-top-section,
-.affiliate-article h2.affiliate-section-heading.emergency-section,
-.affiliate-section-heading {
-  color: #ffffff !important;
-  background: #111827 !important;
-  border: none !important;
-  border-left: none !important;
-  border-radius: 0 !important;
-  font-size: clamp(1.35rem, 2.2vw, 1.75rem) !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.01em;
-  margin: 38px 0 18px !important;
-  padding: 18px 18px !important;
-  scroll-margin-top: 90px;
-}
+.affiliate-section-heading,
+.affiliate-article h3.affiliate-subheading,
 .affiliate-subheading {
-  color: #111827;
-  background: #eef1f5;
-  border-left: 4px solid #9aa7b5;
-  border-radius: 0;
-  font-size: clamp(1.12rem, 1.7vw, 1.34rem);
-  font-weight: 800;
-  margin: 28px 0 12px;
-  padding: 8px 12px;
   scroll-margin-top: 90px;
 }
 .affiliate-list-entry-heading[data-ordinal]::before {
@@ -959,11 +1106,6 @@ def _article_style_block() -> str:
 }
 .affiliate-link:hover {
   color: var(--main-blue-dark) !important;
-}
-.affiliate-subheading.emergency-section {
-  color: #111827 !important;
-  background: #eef1f5 !important;
-  border-left-color: #9aa7b5 !important;
 }
 .affiliate-faq-item {
   background: #ffffff;

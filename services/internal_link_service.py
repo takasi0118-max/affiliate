@@ -5,6 +5,10 @@ from dataclasses import dataclass, replace
 from services.article_generator import GeneratedArticle
 from services.article_link_models import ArticleLink
 from services.article_link_sanitizer import sanitize_article_references
+from services.calendar_year_normalizer import (
+    normalize_article_calendar_year,
+    strip_calendar_year_from_title,
+)
 from services.inline_related_link_service import InlineRelatedLinkService
 from services.seo_service import SeoAnalysis
 
@@ -112,9 +116,12 @@ def _build_link(article: GeneratedArticle, seo: SeoAnalysis) -> ArticleLink:
     title = seo.seo_title or _fallback_title(article.article_type, article.theme)
     # slugが取れていればWordPressの想定URLにする。無ければ記事種別で仮URLを作る。
     slug = seo.slug or f"{article.theme}-{article.article_type}"
+    link_title = normalize_article_calendar_year(title)
+    if article.article_type in {"problem", "problem_only"}:
+        link_title = strip_calendar_year_from_title(link_title)
     return ArticleLink(
         article_type=article.article_type,
-        title=title,
+        title=link_title,
         url=f"/{slug.strip('/')}/",
     )
 
